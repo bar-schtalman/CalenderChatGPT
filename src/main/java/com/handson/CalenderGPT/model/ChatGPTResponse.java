@@ -1,7 +1,6 @@
-package com.handson.CalenderGPT.models;
+package com.handson.CalenderGPT.model;
 
 import java.util.List;
-import com.handson.CalenderGPT.models.Choice;
 
 
 public class ChatGPTResponse {

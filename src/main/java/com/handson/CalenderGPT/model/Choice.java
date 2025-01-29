@@ -1,6 +1,4 @@
-package com.handson.CalenderGPT.models; // Adjust if needed
-
-import com.handson.CalenderGPT.models.Message;
+package com.handson.CalenderGPT.model; // Adjust if needed
 
 public class Choice {
 

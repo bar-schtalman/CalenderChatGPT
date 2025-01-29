@@ -1,6 +1,4 @@
-package com.handson.CalenderGPT.models;
-
-import com.handson.CalenderGPT.models.Message;
+package com.handson.CalenderGPT.model;
 
 import java.util.List;
 

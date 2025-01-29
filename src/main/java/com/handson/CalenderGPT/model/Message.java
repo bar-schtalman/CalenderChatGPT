@@ -1,4 +1,4 @@
-package com.handson.CalenderGPT.models;
+package com.handson.CalenderGPT.model;
 
 public class Message {
     private String role;

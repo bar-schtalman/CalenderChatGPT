@@ -1,8 +1,8 @@
 package com.handson.CalenderGPT.controller;
 
-import com.handson.CalenderGPT.models.ChatGPTRequest;
-import com.handson.CalenderGPT.models.ChatGPTResponse;
-import com.handson.CalenderGPT.models.Message;
+import com.handson.CalenderGPT.model.ChatGPTRequest;
+import com.handson.CalenderGPT.model.ChatGPTResponse;
+import com.handson.CalenderGPT.model.Message;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
