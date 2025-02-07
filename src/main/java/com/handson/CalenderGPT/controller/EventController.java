@@ -93,6 +93,59 @@ public class EventController {
     }
 
     /**
+     * Updates an existing event in the specified Google Calendar.
+     *
+     * @param calendarId The ID of the calendar.
+     * @param eventId The ID of the event to update.
+     * @param eventRequest The updated event details from your custom Event model.
+     * @return Confirmation message with updated event link.
+     */
+    @PutMapping("/{eventId}")
+    public ResponseEntity<String> updateEvent(
+            @PathVariable String calendarId,
+            @PathVariable String eventId,
+            @RequestBody Event eventRequest) {
+        try {
+            com.google.api.services.calendar.model.Event existingEvent = getGoogleCalendarClient()
+                    .events()
+                    .get(calendarId, eventId)
+                    .execute();
+
+            existingEvent.setSummary(eventRequest.getSummary());
+            existingEvent.setLocation(eventRequest.getLocation());
+            existingEvent.setDescription(eventRequest.getDescription());
+
+            DateTime startDateTime = convertToGoogleDateTime(eventRequest.getStart(), "UTC");
+            DateTime endDateTime = convertToGoogleDateTime(eventRequest.getEnd(), "UTC");
+
+            EventDateTime start = new EventDateTime()
+                    .setDateTime(startDateTime)
+                    .setTimeZone("UTC");
+            existingEvent.setStart(start);
+
+            EventDateTime end = new EventDateTime()
+                    .setDateTime(endDateTime)
+                    .setTimeZone("UTC");
+            existingEvent.setEnd(end);
+
+            com.google.api.services.calendar.model.Event updatedEvent = getGoogleCalendarClient()
+                    .events()
+                    .update(calendarId, eventId, existingEvent)
+                    .execute();
+
+            return ResponseEntity.ok("Event updated successfully: " + updatedEvent.getHtmlLink());
+        } catch (IOException e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Failed to update event: " + e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Unexpected error occurred while updating the event.");
+        }
+    }
+
+    /**
      * Fetches events from the specified calendar within a date range.
      *
      * @param calendarId The ID of the calendar.
@@ -105,8 +158,8 @@ public class EventController {
     @GetMapping
     public ResponseEntity<List<Map<String, String>>> getEventsInDateRange(
             @PathVariable String calendarId,
-            @RequestParam @ApiParam(value = "Start date-time in RFC3339 format", example = "2025-02-01T00:00:00Z") String startDate,
-            @RequestParam @ApiParam(value = "End date-time in RFC3339 format", example = "2025-02-28T23:59:59Z") String endDate) {
+            @RequestParam @ApiParam(value = "Start date-time in RFC3339 format", example = "2025-02-01T00:00:00Z", defaultValue = "2025-02-01T00:00:00Z") String startDate,
+            @RequestParam @ApiParam(value = "End date-time in RFC3339 format", example = "2025-02-28T23:59:59Z", defaultValue = "2025-02-28T23:59:59Z") String endDate) {
         try {
             DateTime timeMin = new DateTime(startDate);
             DateTime timeMax = new DateTime(endDate);

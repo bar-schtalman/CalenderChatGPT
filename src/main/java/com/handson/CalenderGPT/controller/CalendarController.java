@@ -5,6 +5,7 @@ import com.google.api.services.calendar.model.CalendarList;
 import com.google.api.services.calendar.model.CalendarListEntry;
 import com.handson.CalenderGPT.config.GoogleCalendarConfig;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -73,4 +74,29 @@ public class CalendarController {
             return ResponseEntity.status(500).body("Unexpected error occurred.");
         }
     }
+
+    @PostMapping
+    public ResponseEntity<String> createCalendar(@RequestParam String summary) {
+        try {
+            com.google.api.services.calendar.model.Calendar calendar = new com.google.api.services.calendar.model.Calendar()
+                    .setSummary(summary)
+                    .setTimeZone("UTC"); // You can modify the timezone if needed
+
+            com.google.api.services.calendar.model.Calendar createdCalendar = getGoogleCalendarClient()
+                    .calendars()
+                    .insert(calendar)
+                    .execute();
+
+            return ResponseEntity.ok("Calendar created successfully with ID: " + createdCalendar.getId());
+        } catch (IOException e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Failed to create calendar: " + e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Unexpected error occurred while creating the calendar.");
+        }
+    }
+
 }
