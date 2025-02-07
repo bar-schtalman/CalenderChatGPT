@@ -52,4 +52,6 @@ public class GoogleCalendarConfig {
                 .setApplicationName("CalendarGPT")
                 .build();
     }
+
+
 }
