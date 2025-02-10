@@ -31,6 +31,8 @@ public class OpenAIAPIController {
     // In production, you'd store this per user/session.
     private final List<Message> conversationHistory = new ArrayList<>();
 
+
+
     @GetMapping("/chat")
     public String chat(@RequestParam("prompt") String prompt) {
         try {
@@ -67,6 +69,8 @@ public class OpenAIAPIController {
             return "An unexpected error occurred. Please try again later." + e.toString();
         }
     }
+
+
 
 
 }

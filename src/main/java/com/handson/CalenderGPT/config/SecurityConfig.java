@@ -10,31 +10,35 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
     @Override
     protected void configure(HttpSecurity http) throws Exception {
         http
-                .csrf().disable()  // Disable CSRF for API endpoints, common for OAuth2 secured APIs
+                .csrf().disable()
                 .authorizeRequests()
                 .antMatchers(
                         "/",
-                        "/error",
-                        "/swagger-ui/**",  // Allow Swagger UI access
+                        "/swagger-ui.html",
+                        "/swagger-ui/**",
+                        "/v2/api-docs",
                         "/v3/api-docs/**",
                         "/swagger-resources/**",
                         "/webjars/**",
-                        "/auth/google",    // Allow Google auth endpoints without security
+                        "/auth/google",
                         "/auth/status",
+                        "/api/google-calendar/**",
+                        "/chat",              // Add ChatGPT endpoint here
                         "/logout"
                 ).permitAll()
-                .antMatchers("/api/google-calendar/**").authenticated()  // Secure calendar API endpoints
-                .anyRequest().authenticated()  // Secure all other requests by default
+
+                .anyRequest().authenticated()
                 .and()
                 .oauth2Login()
-                .loginPage("/auth/google")  // Redirect users to Google for login
+                .loginPage("/auth/google")
                 .and()
                 .logout()
                 .logoutUrl("/logout")
-                .logoutSuccessUrl("/swagger-ui.html")  // Redirect to Swagger after logout
+                .logoutSuccessUrl("/swagger-ui.html")
                 .invalidateHttpSession(true)
                 .clearAuthentication(true)
                 .deleteCookies("JSESSIONID")
                 .permitAll();
     }
+
 }
