@@ -8,49 +8,53 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.handson.CalenderGPT.service.GoogleCalendarService;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/google-calendar/calendars")
 public class CalendarController {
 
-    private final GoogleCalendarConfig googleCalendarConfig;
-    private Calendar googleCalendarClient;
+    private final GoogleCalendarService googleCalendarService;
 
     @Autowired
-    public CalendarController(GoogleCalendarConfig googleCalendarConfig) {
-        this.googleCalendarConfig = googleCalendarConfig;
-    }
-
-    private Calendar getGoogleCalendarClient() throws Exception {
-        if (googleCalendarClient == null) {
-            googleCalendarClient = googleCalendarConfig.googleCalendarClient();
-        }
-        return googleCalendarClient;
+    public CalendarController(GoogleCalendarService googleCalendarService) {
+        this.googleCalendarService = googleCalendarService;
     }
 
     @GetMapping
-    public ResponseEntity<List<String>> getCalendarsWithIds() {
+    public ResponseEntity<List<Map<String, Object>>> getCalendarsWithDetails() {
         try {
-            CalendarList calendarList = getGoogleCalendarClient().calendarList().list().execute();
-            List<String> calendarPairs = new ArrayList<>();
-            for (CalendarListEntry entry : calendarList.getItems()) {
-                calendarPairs.add(entry.getSummary() + "," + entry.getId());
-            }
-            return ResponseEntity.ok(calendarPairs);
+            List<Map<String, Object>> calendarDetails = googleCalendarService.getCalendars();
+            return ResponseEntity.ok(calendarDetails);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).body(null);
         }
     }
 
+    @GetMapping("/default")
+    public ResponseEntity<Map<String, String>> getDefaultCalendar() {
+        try {
+            Map<String, String> defaultCalendar = googleCalendarService.getDefaultCalendarDetails();
+            return ResponseEntity.ok(defaultCalendar);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return ResponseEntity.status(404).build();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).build();
+        }
+    }
+
     @GetMapping("/{calendarId}")
     public ResponseEntity<CalendarListEntry> getCalendarById(@PathVariable String calendarId) {
         try {
-            CalendarListEntry calendar = getGoogleCalendarClient().calendarList().get(calendarId).execute();
+            CalendarListEntry calendar = googleCalendarService.getCalendarById(calendarId);
             return ResponseEntity.ok(calendar);
         } catch (IOException e) {
             e.printStackTrace();
@@ -64,7 +68,7 @@ public class CalendarController {
     @DeleteMapping("/{calendarId}")
     public ResponseEntity<String> deleteCalendar(@PathVariable String calendarId) {
         try {
-            getGoogleCalendarClient().calendarList().delete(calendarId).execute();
+            googleCalendarService.deleteCalendar(calendarId);
             return ResponseEntity.ok("Calendar with ID " + calendarId + " deleted successfully.");
         } catch (IOException e) {
             e.printStackTrace();
@@ -78,16 +82,8 @@ public class CalendarController {
     @PostMapping
     public ResponseEntity<String> createCalendar(@RequestParam String summary) {
         try {
-            com.google.api.services.calendar.model.Calendar calendar = new com.google.api.services.calendar.model.Calendar()
-                    .setSummary(summary)
-                    .setTimeZone("UTC"); // You can modify the timezone if needed
-
-            com.google.api.services.calendar.model.Calendar createdCalendar = getGoogleCalendarClient()
-                    .calendars()
-                    .insert(calendar)
-                    .execute();
-
-            return ResponseEntity.ok("Calendar created successfully with ID: " + createdCalendar.getId());
+            String calendarId = googleCalendarService.createCalendar(summary);
+            return ResponseEntity.ok("Calendar created successfully with ID: " + calendarId);
         } catch (IOException e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -98,5 +94,11 @@ public class CalendarController {
                     .body("Unexpected error occurred while creating the calendar.");
         }
     }
-
 }
+
+
+
+
+
+
+
