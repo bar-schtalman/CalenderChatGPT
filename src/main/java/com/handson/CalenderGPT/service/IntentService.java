@@ -60,11 +60,15 @@ public class IntentService {
         switch (intent) {
             case CREATE_EVENT:
                 return "Extract the event creation details from the following text and return them in JSON format with these fields: " +
-                        "summary, date, time (if provided), location (if provided), description (if provided). Text: \"" + prompt + "\"";
+                        "summary, start (in ISO 8601 format: YYYY-MM-DDTHH:MM:SS.SSSZ), " +
+                        "end (in ISO 8601 format: YYYY-MM-DDTHH:MM:SS.SSSZ, default to 1 hour after start if not provided), " +
+                        "location (if provided), description (if provided). " +
+                        "If the year is not mentioned or the provided date is in the past, assume the next occurrence in the future. Text: \"" + prompt + "\"";
 
             case EDIT_EVENT:
                 return "Extract the event editing details from the following text and return them in JSON format with these fields: " +
-                        "event_id, fields_to_update (summary, date, time, location, description). Text: \"" + prompt + "\"";
+                        "event_id, fields_to_update (summary, start (in ISO 8601 format), end (in ISO 8601 format), location, description). " +
+                        "If the year is not mentioned or the provided date is in the past, assume the next occurrence in the future. Text: \"" + prompt + "\"";
 
             case DELETE_EVENT:
                 return "Extract the event deletion details from the following text and return them in JSON format with this field: " +
@@ -72,7 +76,8 @@ public class IntentService {
 
             case VIEW_EVENTS:
                 return "Extract the date range from the following text for viewing events and return it in JSON format with these fields: " +
-                        "start_date, end_date, start_time (if provided), end_time (if provided). Text: \"" + prompt + "\"";
+                        "start (in ISO 8601 format), end (in ISO 8601 format). " +
+                        "If the year is not mentioned or the provided date is in the past, assume the next occurrence in the future. Text: \"" + prompt + "\"";
 
             default:
                 return "Analyze the following prompt and respond accordingly: \"" + prompt + "\"";

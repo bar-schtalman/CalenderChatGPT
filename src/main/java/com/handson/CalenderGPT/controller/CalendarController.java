@@ -4,6 +4,7 @@ import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.CalendarList;
 import com.google.api.services.calendar.model.CalendarListEntry;
 import com.handson.CalenderGPT.config.GoogleCalendarConfig;
+import com.handson.CalenderGPT.context.CalendarContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,10 +21,21 @@ import java.util.Map;
 public class CalendarController {
 
     private final GoogleCalendarService googleCalendarService;
+    private final CalendarContext calendarContext;
 
     @Autowired
-    public CalendarController(GoogleCalendarService googleCalendarService) {
+    public CalendarController(GoogleCalendarService googleCalendarService, CalendarContext calendarContext) {
         this.googleCalendarService = googleCalendarService;
+        this.calendarContext = calendarContext;
+
+        // Set the default calendar ID at application start
+        try {
+            Map<String, String> defaultCalendar = googleCalendarService.getDefaultCalendarDetails();
+            this.calendarContext.setCalendarId(defaultCalendar.get("id"));
+        } catch (IOException e) {
+            e.printStackTrace();
+            // Handle case where default calendar is not found
+        }
     }
 
     @GetMapping
@@ -94,6 +106,7 @@ public class CalendarController {
                     .body("Unexpected error occurred while creating the calendar.");
         }
     }
+
 }
 
 
