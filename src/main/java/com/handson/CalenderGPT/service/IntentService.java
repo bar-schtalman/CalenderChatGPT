@@ -1,5 +1,8 @@
 package com.handson.CalenderGPT.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.handson.CalenderGPT.model.IntentType;
 import com.handson.CalenderGPT.model.ChatGPTRequest;
 import com.handson.CalenderGPT.model.ChatGPTResponse;
@@ -26,24 +29,51 @@ public class IntentService {
         this.template = template;
     }
 
-    public IntentType detectIntent(String userInput) {
-        String input = userInput.toLowerCase();
+    /**
+     * Determines whether the user input is a CRUD operation or a regular chat.
+     * If CRUD is detected, it extracts event details in JSON format.
+     * Otherwise, it returns a regular chatbot response.
+     */
+    public String processUserPrompt(String userInput) {
+        try {
+            System.out.println("\n🔍 Processing User Prompt: " + userInput);
 
-        if (input.contains("create") || input.contains("schedule") || input.contains("add event") || input.contains("set up") || input.contains("plan")) {
-            return IntentType.CREATE_EVENT;
-        } else if (input.contains("edit") || input.contains("update") || input.contains("reschedule") || input.contains("change time") || input.contains("modify")) {
-            return IntentType.EDIT_EVENT;
-        } else if (input.contains("delete") || input.contains("remove") || input.contains("cancel") || input.contains("discard event") || input.contains("erase")) {
-            return IntentType.DELETE_EVENT;
-        } else if (input.contains("show") || input.contains("view") || input.contains("list") || input.contains("what's on my calendar") || input.contains("display")) {
-            return IntentType.VIEW_EVENTS;
+            // Send prompt to ChatGPT for intent detection & detail extraction
+            String jsonResponse = extractDetailsFromPrompt(userInput);
+            System.out.println("🛠 Raw Response from ChatGPT:\n" + jsonResponse);
+
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode rootNode = mapper.readTree(jsonResponse);
+
+            // Get detected intent
+            String extractedIntent = rootNode.path("intent").asText().toUpperCase();
+            System.out.println("🔹 Extracted Intent from ChatGPT: " + extractedIntent);
+
+            IntentType intent = mapIntentType(extractedIntent);
+            System.out.println("✅ Mapped Intent: " + intent);
+
+            if (intent != IntentType.NONE) {
+                // CRUD operation detected, return JSON with extracted event details
+                String formattedDetails = formatExtractedEventDetails(rootNode);
+                System.out.println("📅 Extracted Event Details: " + formattedDetails);
+                return formattedDetails;
+            } else {
+                // No CRUD intent detected, return normal chatbot response
+                String chatbotResponse = rootNode.path("message").asText();
+                System.out.println("💬 Regular Chat Response: " + chatbotResponse);
+                return chatbotResponse;
+            }
+        } catch (Exception e) {
+            System.err.println("❌ Error processing prompt: " + e.getMessage());
+            e.printStackTrace();
+            return "Error processing prompt: " + e.getMessage();
         }
-
-        return IntentType.NONE;  // No matching intent found
     }
-
-    public String extractDetailsFromPrompt(String prompt, IntentType intent) {
-        String extractionPrompt = buildExtractionPrompt(prompt, intent);
+    private String extractIntentFromPrompt(String prompt) {
+        String extractionPrompt = "Analyze this text and return ONLY one of these exact values: " +
+                "\"CREATE\", \"EDIT\", \"DELETE\", \"VIEW\", \"NONE\". " +
+                "Do NOT return any other text, and do NOT add extra words. " +
+                "Text: \"" + prompt + "\"";
 
         ChatGPTRequest extractionRequest = new ChatGPTRequest();
         extractionRequest.setModel(model);
@@ -53,34 +83,133 @@ public class IntentService {
         extractionRequest.setMessages(messages);
 
         ChatGPTResponse response = template.postForObject(url, extractionRequest, ChatGPTResponse.class);
-        return response.getChoices().get(0).getMessage().getContent();
+        return response.getChoices().get(0).getMessage().getContent().trim();
     }
 
-    private String buildExtractionPrompt(String prompt, IntentType intent) {
-        switch (intent) {
-            case CREATE_EVENT:
-                return "Extract the event creation details from the following text and return them in JSON format with these fields: " +
-                        "summary, start (in ISO 8601 format: YYYY-MM-DDTHH:MM:SS.SSSZ), " +
-                        "end (in ISO 8601 format: YYYY-MM-DDTHH:MM:SS.SSSZ, default to 1 hour after start if not provided), " +
-                        "location (if provided), description (if provided). " +
-                        "If the year is not mentioned or the provided date is in the past, assume the next occurrence in the future. Text: \"" + prompt + "\"";
 
-            case EDIT_EVENT:
-                return "Extract the event editing details from the following text and return them in JSON format with these fields: " +
-                        "event_id, fields_to_update (summary, start (in ISO 8601 format), end (in ISO 8601 format), location, description). " +
-                        "If the year is not mentioned or the provided date is in the past, assume the next occurrence in the future. Text: \"" + prompt + "\"";
+    public IntentType detectIntent(String userInput) {
+        try {
+            // Ask ChatGPT to classify the intent
+            String extractedIntent = extractIntentFromPrompt(userInput).toUpperCase().replace(" ", "_");
 
-            case DELETE_EVENT:
-                return "Extract the event deletion details from the following text and return them in JSON format with this field: " +
-                        "event_id. Text: \"" + prompt + "\"";
+            System.out.println("Extracted Intent from ChatGPT: " + extractedIntent);
 
-            case VIEW_EVENTS:
-                return "Extract the date range from the following text for viewing events and return it in JSON format with these fields: " +
-                        "start (in ISO 8601 format), end (in ISO 8601 format). " +
-                        "If the year is not mentioned or the provided date is in the past, assume the next occurrence in the future. Text: \"" + prompt + "\"";
-
-            default:
-                return "Analyze the following prompt and respond accordingly: \"" + prompt + "\"";
+            // Map ChatGPT's output to valid IntentType enums
+            switch (extractedIntent) {
+                case "CREATE":
+                    return IntentType.CREATE_EVENT;
+                case "EDIT":
+                    return IntentType.EDIT_EVENT;
+                case "DELETE":
+                    return IntentType.DELETE_EVENT;
+                case "VIEW":
+                    return IntentType.VIEW_EVENTS;
+                case "NONE":
+                    return IntentType.NONE;
+                default:
+                    System.out.println("⚠️ Unknown Intent Detected: " + extractedIntent);
+                    return IntentType.NONE;
+            }
+        } catch (Exception e) {
+            System.out.println("❌ Error detecting intent: " + e.getMessage());
+            return IntentType.NONE;
         }
+    }
+
+
+    /**
+     * Extracts details from the user input using ChatGPT.
+     */
+    public String extractDetailsFromPrompt(String prompt) {
+        String extractionPrompt = "Analyze the following text and determine if it represents an event-related request (Create, Edit, Delete, View). " +
+                "If it is event-related, return structured JSON with fields: " +
+                "'intent' (CREATE, EDIT, DELETE, VIEW), " +
+                "'summary', 'description', 'start', 'end', 'location'. " +
+                "Ensure 'start' and 'end' are in ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSZ). " +
+                "If 'end' is not provided, set it to 1 hour after 'start'. " +
+                "If the intent is NOT event-related, return a simple JSON object: {\"intent\": \"NONE\", \"message\": \"response text\"}. " +
+                "Do NOT wrap the response in markdown code blocks or triple backticks (`). " +  // Prevent wrapping in ```json
+                "Text: \"" + prompt + "\"";
+
+        ChatGPTRequest extractionRequest = new ChatGPTRequest();
+        extractionRequest.setModel(model);
+
+        List<Message> messages = new ArrayList<>();
+        messages.add(new Message("system", extractionPrompt));
+        extractionRequest.setMessages(messages);
+
+        ChatGPTResponse response = template.postForObject(url, extractionRequest, ChatGPTResponse.class);
+        String rawResponse = response.getChoices().get(0).getMessage().getContent().trim();
+
+        System.out.println("🛠 Raw Response from ChatGPT:\n" + rawResponse);
+
+        // Ensure we are parsing JSON correctly
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode jsonNode;
+
+        try {
+            jsonNode = mapper.readTree(rawResponse);
+        } catch (Exception e) {
+            // If parsing fails, assume it's a plain message and wrap it in a valid JSON object
+            System.out.println("⚠️ Raw response was not valid JSON, treating as plain text.");
+            jsonNode = mapper.createObjectNode()
+                    .put("intent", "NONE")
+                    .put("message", rawResponse);
+        }
+
+        return jsonNode.toString();
+    }
+
+
+
+    /**
+     * Maps extracted intent from ChatGPT to IntentType enum.
+     */
+    private IntentType mapIntentType(String extractedIntent) {
+        try {
+            switch (extractedIntent) {
+                case "CREATE":
+                    return IntentType.CREATE_EVENT;
+                case "EDIT":
+                    return IntentType.EDIT_EVENT;
+                case "DELETE":
+                    return IntentType.DELETE_EVENT;
+                case "VIEW":
+                    return IntentType.VIEW_EVENTS;
+                case "NONE":
+                    return IntentType.NONE;
+                default:
+                    System.out.println("❗ Unknown Intent Detected: " + extractedIntent);
+                    return IntentType.NONE;
+            }
+        } catch (IllegalArgumentException e) {
+            System.err.println("🚨 Invalid Intent Mapping: " + extractedIntent);
+            e.printStackTrace();
+            return IntentType.NONE;
+        }
+    }
+
+    /**
+     * Formats extracted event details into JSON format.
+     */
+    private String formatExtractedEventDetails(JsonNode rootNode) {
+        String summary = rootNode.path("summary").asText("No Title");
+        String description = rootNode.path("description").asText("");
+        String start = rootNode.path("start").asText("2025-02-17T19:13:29.676Z");
+        String end = rootNode.path("end").asText("");
+        String location = rootNode.path("location").asText("");
+
+        // If end time is missing, set it 1 hour after start
+        if (end.isEmpty()) {
+            end = start.replace("T", "T01:"); // Default to 1 hour later
+        }
+
+        return "{\n" +
+                "  \"summary\": \"" + summary + "\",\n" +
+                "  \"description\": \"" + description + "\",\n" +
+                "  \"start\": \"" + start + "\",\n" +
+                "  \"end\": \"" + end + "\",\n" +
+                "  \"location\": \"" + location + "\"\n" +
+                "}";
     }
 }

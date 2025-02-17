@@ -1,5 +1,6 @@
 package com.handson.CalenderGPT.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.handson.CalenderGPT.model.IntentType;
 import com.handson.CalenderGPT.model.ChatGPTRequest;
@@ -48,54 +49,66 @@ public class OpenAIAPIController {
     @GetMapping("/chat")
     public String chat(@RequestParam("prompt") String prompt) {
         try {
-            IntentType intent = intentService.detectIntent(prompt);
-            String intentMessage = "Detected Intent: " + intent.name() + "\n\n";
+            String extractedJson = intentService.extractDetailsFromPrompt(prompt);
 
+            // Debugging Logs
+            System.out.println("🛠 Extracted JSON from ChatGPT:\n" + extractedJson);
+
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode jsonNode = mapper.readTree(extractedJson);
+
+            String extractedIntent = jsonNode.get("intent").asText();
+            System.out.println("Extracted Intent from ChatGPT: " + extractedIntent);
+
+            // Try mapping to IntentType
+            IntentType intent;
+            switch (extractedIntent.toUpperCase()) {
+                case "CREATE":
+                    intent = IntentType.CREATE_EVENT;
+                    break;
+                case "EDIT":
+                    intent = IntentType.EDIT_EVENT;
+                    break;
+                case "DELETE":
+                    intent = IntentType.DELETE_EVENT;
+                    break;
+                case "VIEW":
+                    intent = IntentType.VIEW_EVENTS;
+                    break;
+                default:
+                    intent = IntentType.NONE;
+            }
+
+            // If it's an event, return extracted details
             if (intent != IntentType.NONE) {
-                String extractedDetails = intentService.extractDetailsFromPrompt(prompt, intent);
-
-                if (intent == IntentType.CREATE_EVENT) {
-                    System.out.println("Extracted Details: " + extractedDetails);
-                    Event eventRequest = parseEventDetails(extractedDetails);
-                    pendingEvent = eventRequest;
-                    return intentMessage + "You are about to create the following event:\n" +
-                            formatEventDetails(eventRequest) +
-                            "\nDo you want to proceed? (yes/no)";
-                }
-
-                return intentMessage + extractedDetails;
+                return "Detected Intent: " + intent.name() + "\n\nExtracted Details:\n" + jsonNode.toPrettyString();
             }
 
-            if (pendingEvent != null && (prompt.equalsIgnoreCase("yes") || prompt.equalsIgnoreCase("no"))) {
-                if (prompt.equalsIgnoreCase("yes")) {
-                    String calendarId = calendarContext.getCalendarId();
-                    String eventResponse = eventService.createEvent(calendarId, pendingEvent);
-                    pendingEvent = null; // Reset after confirmation
-                    return "Event created successfully: " + eventResponse;
-                } else {
-                    pendingEvent = null; // Reset if user cancels
-                    return "Event creation canceled.";
-                }
-            }
+            // If no intent, proceed with regular chat
+            return chatWithGPT(prompt);
 
-            conversationHistory.add(new Message("user", prompt));
-
-            ChatGPTRequest chatGPTRequest = new ChatGPTRequest();
-            chatGPTRequest.setModel(model);
-            chatGPTRequest.setMessages(conversationHistory);
-
-            ChatGPTResponse chatGPTResponse = template.postForObject(url, chatGPTRequest, ChatGPTResponse.class);
-            String assistantReply = chatGPTResponse.getChoices().get(0).getMessage().getContent();
-
-            conversationHistory.add(new Message("assistant", assistantReply));
-            return intentMessage + assistantReply;
-
-        } catch (HttpClientErrorException.TooManyRequests e) {
-            return "Error: You have exceeded your API usage quota. Please check your OpenAI plan.";
         } catch (Exception e) {
-            return "An unexpected error occurred. Please try again later. " + e.toString();
+            System.out.println("❌ Error processing request: " + e.getMessage());
+            return "❌ Error: " + e.getMessage() + "\n\nCheck server logs for details.";
         }
     }
+    private String chatWithGPT(String prompt) {
+        conversationHistory.add(new Message("user", prompt));
+
+        ChatGPTRequest chatGPTRequest = new ChatGPTRequest();
+        chatGPTRequest.setModel(model);
+        chatGPTRequest.setMessages(conversationHistory);
+
+        ChatGPTResponse chatGPTResponse = template.postForObject(url, chatGPTRequest, ChatGPTResponse.class);
+        String assistantReply = chatGPTResponse.getChoices().get(0).getMessage().getContent();
+
+        conversationHistory.add(new Message("assistant", assistantReply));
+
+        return assistantReply;
+    }
+
+
+
 
     // Updated method to parse extracted details into an Event object
     private Event parseEventDetails(String extractedDetails) {
