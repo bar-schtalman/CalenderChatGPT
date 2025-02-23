@@ -49,6 +49,19 @@ public class OpenAIAPIController {
     @GetMapping("/chat")
     public String chat(@RequestParam("prompt") String prompt) {
         try {
+            // Check for pending event confirmation
+            if (pendingEvent != null) {
+                if (isAffirmativeResponse(prompt)) {
+                    String calendarId = calendarContext.getCalendarId();
+                    String eventResponse = eventService.createEvent(calendarId, pendingEvent);
+                    pendingEvent = null; // Reset after confirmation
+                    return "✅ Event created successfully:\n" + eventResponse;
+                } else {
+                    pendingEvent = null; // Reset if user cancels
+                    return "❌ Event creation canceled. Continuing chat...";
+                }
+            }
+
             String extractedJson = intentService.extractDetailsFromPrompt(prompt);
 
             // Debugging Logs
@@ -79,67 +92,92 @@ public class OpenAIAPIController {
                     intent = IntentType.NONE;
             }
 
-            // If it's an event, return extracted details
-            if (intent != IntentType.NONE) {
-                return "Detected Intent: " + intent.name() + "\n\nExtracted Details:\n" + jsonNode.toPrettyString();
+            // If it's an event, return extracted details with confirmation
+            if (intent == IntentType.CREATE_EVENT) {
+                pendingEvent = parseEventDetails(jsonNode);
+                return "Detected Intent: " + intent.name() + "\n\nYou are about to create the following event:\n" +
+                        formatEventDetails(pendingEvent) +
+                        "\nDo you want to proceed? (yes/no)";
             }
 
             // If no intent, proceed with regular chat
-            return chatWithGPT(prompt);
+            return jsonNode.has("message") ? jsonNode.get("message").asText() : "Could not process request.";
 
         } catch (Exception e) {
             System.out.println("❌ Error processing request: " + e.getMessage());
             return "❌ Error: " + e.getMessage() + "\n\nCheck server logs for details.";
         }
     }
-    private String chatWithGPT(String prompt) {
-        conversationHistory.add(new Message("user", prompt));
 
-        ChatGPTRequest chatGPTRequest = new ChatGPTRequest();
-        chatGPTRequest.setModel(model);
-        chatGPTRequest.setMessages(conversationHistory);
+    private boolean isAffirmativeResponse(String response) {
+        try {
+            String analysisPrompt = "Analyze the following text and determine if it expresses agreement. " +
+                    "Respond only with 'yes' or 'no'. Text: \"" + response + "\"";
 
-        ChatGPTResponse chatGPTResponse = template.postForObject(url, chatGPTRequest, ChatGPTResponse.class);
-        String assistantReply = chatGPTResponse.getChoices().get(0).getMessage().getContent();
+            ChatGPTRequest request = new ChatGPTRequest();
+            request.setModel(model);
+            List<Message> messages = new ArrayList<>();
+            messages.add(new Message("system", analysisPrompt));
+            request.setMessages(messages);
 
-        conversationHistory.add(new Message("assistant", assistantReply));
-
-        return assistantReply;
+            ChatGPTResponse chatGPTResponse = template.postForObject(url, request, ChatGPTResponse.class);
+            String result = chatGPTResponse.getChoices().get(0).getMessage().getContent().trim().toLowerCase();
+            return "yes".equals(result);
+        } catch (Exception e) {
+            System.err.println("❌ Error determining user response: " + e.getMessage());
+            return false;
+        }
     }
 
 
-
-
-    // Updated method to parse extracted details into an Event object
-    private Event parseEventDetails(String extractedDetails) {
-        ObjectMapper mapper = new ObjectMapper();
+    private Event parseEventDetails(JsonNode jsonNode) {
         Event event = new Event();
         DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
 
         try {
-            Map<String, String> detailsMap = mapper.readValue(extractedDetails, Map.class);
-            event.setSummary(detailsMap.getOrDefault("summary", "No Title"));
-            event.setDescription(detailsMap.getOrDefault("description", ""));
-            event.setLocation(detailsMap.getOrDefault("location", ""));
+            event.setSummary(jsonNode.get("summary").asText("No Title"));
+            event.setDescription(jsonNode.get("description").asText(""));
+            event.setLocation(jsonNode.get("location").asText(""));
 
-            String startDateTime = detailsMap.get("start");
-            String endDateTime = detailsMap.get("end");
+            String startDateTime = jsonNode.get("start").asText();
+            String endDateTime = jsonNode.get("end").asText();
 
-            if (startDateTime != null && !startDateTime.isEmpty()) {
-                event.setStart(LocalDateTime.parse(startDateTime, formatter));
-            } else {
-                event.setStart(LocalDateTime.now());  // Default to now if not provided
+            System.out.println("🔹 Extracted Start Time: " + startDateTime);
+            System.out.println("🔹 Extracted End Time: " + endDateTime);
+
+            // Parse start time
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime start = startDateTime != null && !startDateTime.isEmpty()
+                    ? LocalDateTime.parse(startDateTime, formatter)
+                    : now;
+
+            // If the start time is in the past, move it to the next future occurrence
+            if (start.isBefore(now)) {
+                System.err.println("🚨 Start time is in the past! Adjusting to future occurrence...");
+                start = start.plusYears(1);
             }
 
+            // Parse end time or default to 1 hour later
+            LocalDateTime end;
             if (endDateTime != null && !endDateTime.isEmpty()) {
-                event.setEnd(LocalDateTime.parse(endDateTime, formatter));
+                end = LocalDateTime.parse(endDateTime, formatter);
+
+                // Ensure the end time is not before start
+                if (end.isBefore(start)) {
+                    System.err.println("🚨 End time is before start time! Adjusting...");
+                    end = start.plusHours(1);
+                }
             } else {
-                event.setEnd(event.getStart().plusHours(1));  // Default to 1 hour if not provided
+                System.out.println("🔄 No end time provided. Defaulting to 1 hour after start.");
+                end = start.plusHours(1);
             }
+
+            event.setStart(start);
+            event.setEnd(end);
 
         } catch (Exception e) {
             e.printStackTrace();
-            // Fallback in case parsing fails
+            System.err.println("❌ Error parsing event details. Raw JSON: " + jsonNode.toPrettyString());
             event.setSummary("Default Event");
             event.setDescription("No Description");
             event.setLocation("No Location");
@@ -150,7 +188,13 @@ public class OpenAIAPIController {
         return event;
     }
 
-    // Format event details for confirmation message
+
+
+
+
+
+
+
     private String formatEventDetails(Event event) {
         return "Summary: " + event.getSummary() + "\n" +
                 "Description: " + event.getDescription() + "\n" +
