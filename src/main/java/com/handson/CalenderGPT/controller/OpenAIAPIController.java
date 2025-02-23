@@ -110,52 +110,6 @@ public class OpenAIAPIController {
 
 
 
-    // Updated method to parse extracted details into an Event object
-    private Event parseEventDetails(String extractedDetails) {
-        ObjectMapper mapper = new ObjectMapper();
-        Event event = new Event();
-        DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
 
-        try {
-            Map<String, String> detailsMap = mapper.readValue(extractedDetails, Map.class);
-            event.setSummary(detailsMap.getOrDefault("summary", "No Title"));
-            event.setDescription(detailsMap.getOrDefault("description", ""));
-            event.setLocation(detailsMap.getOrDefault("location", ""));
 
-            String startDateTime = detailsMap.get("start");
-            String endDateTime = detailsMap.get("end");
-
-            if (startDateTime != null && !startDateTime.isEmpty()) {
-                event.setStart(LocalDateTime.parse(startDateTime, formatter));
-            } else {
-                event.setStart(LocalDateTime.now());  // Default to now if not provided
-            }
-
-            if (endDateTime != null && !endDateTime.isEmpty()) {
-                event.setEnd(LocalDateTime.parse(endDateTime, formatter));
-            } else {
-                event.setEnd(event.getStart().plusHours(1));  // Default to 1 hour if not provided
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            // Fallback in case parsing fails
-            event.setSummary("Default Event");
-            event.setDescription("No Description");
-            event.setLocation("No Location");
-            event.setStart(LocalDateTime.now());
-            event.setEnd(LocalDateTime.now().plusHours(1));
-        }
-
-        return event;
-    }
-
-    // Format event details for confirmation message
-    private String formatEventDetails(Event event) {
-        return "Summary: " + event.getSummary() + "\n" +
-                "Description: " + event.getDescription() + "\n" +
-                "Location: " + event.getLocation() + "\n" +
-                "Start: " + event.getStart().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + "\n" +
-                "End: " + event.getEnd().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
-    }
 }
