@@ -1,16 +1,13 @@
 package com.handson.CalenderGPT.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.handson.CalenderGPT.model.IntentType;
 import com.handson.CalenderGPT.model.ChatGPTRequest;
 import com.handson.CalenderGPT.model.ChatGPTResponse;
 import com.handson.CalenderGPT.model.Message;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -22,15 +19,15 @@ public class IntentService {
     @Value("${openai.model}")
     private String model;
 
-    @Value("${openai.api.url}")
-    private String url;
+    // Remove the url and RestTemplate injection if not needed here
+    // since we'll use ChatGPTService instead.
 
-    private final RestTemplate template;
-
-    public IntentService(RestTemplate template) {
-        this.template = template;
-    }
+    private final ChatGPTService chatGPTService;
     String today = LocalDateTime.now().format(DateTimeFormatter.ISO_DATE);
+
+    public IntentService(ChatGPTService chatGPTService) {
+        this.chatGPTService = chatGPTService;
+    }
 
     public String extractDetailsFromPrompt(String prompt) {
         String extractionPrompt = "Analyze the following text and determine if it represents an event-related request (Create, Edit, Delete, View). " +
@@ -45,37 +42,23 @@ public class IntentService {
                 "Text: \"" + prompt + "\"";
 
 
-
-        ChatGPTRequest extractionRequest = new ChatGPTRequest();
-        extractionRequest.setModel(model);
-
         List<Message> messages = new ArrayList<>();
         messages.add(new Message("system", extractionPrompt));
-        extractionRequest.setMessages(messages);
-
-        ChatGPTResponse response = template.postForObject(url, extractionRequest, ChatGPTResponse.class);
+        ChatGPTResponse response = chatGPTService.callChatGPT(messages);
         String rawResponse = response.getChoices().get(0).getMessage().getContent().trim();
 
         System.out.println("🛠 Raw Response from ChatGPT:\n" + rawResponse);
 
-        // Ensure we are parsing JSON correctly
         ObjectMapper mapper = new ObjectMapper();
         JsonNode jsonNode;
-
         try {
             jsonNode = mapper.readTree(rawResponse);
         } catch (Exception e) {
-            // If parsing fails, assume it's a plain message and wrap it in a valid JSON object
             System.out.println("⚠️ Raw response was not valid JSON, treating as plain text.");
             jsonNode = mapper.createObjectNode()
                     .put("intent", "NONE")
                     .put("message", rawResponse);
         }
-
         return jsonNode.toString();
     }
-
-
-
-
 }
