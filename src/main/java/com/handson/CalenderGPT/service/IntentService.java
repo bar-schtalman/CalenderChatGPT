@@ -209,4 +209,22 @@ public class IntentService {
                 "  \"location\": \"" + location + "\"\n" +
                 "}";
     }
+
+    private String buildExtractionPrompt(String prompt, IntentType intent) {
+        switch (intent) {
+            case VIEW_EVENTS:
+                return "Analyze the following text and extract a date range for viewing events. " +
+                        "Return JSON with fields: " +
+                        "'intent' (VIEW), " +
+                        "'start' (in ISO 8601 format), " +
+                        "'end' (in ISO 8601 format). " +
+                        "If only a single date is provided, set 'end' to the same date. " +
+                        "Ensure dates are in the future if necessary. " +
+                        "Text: \"" + prompt + "\"";
+
+            default:
+                return "Analyze the following prompt and respond accordingly: \"" + prompt + "\"";
+        }
+    }
+
 }

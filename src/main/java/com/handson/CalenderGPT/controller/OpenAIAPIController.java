@@ -92,12 +92,17 @@ public class OpenAIAPIController {
                     intent = IntentType.NONE;
             }
 
-            // If it's an event, return extracted details with confirmation
+            // Handle CREATE event intent
             if (intent == IntentType.CREATE_EVENT) {
                 pendingEvent = parseEventDetails(jsonNode);
                 return "Detected Intent: " + intent.name() + "\n\nYou are about to create the following event:\n" +
                         formatEventDetails(pendingEvent) +
                         "\nDo you want to proceed? (yes/no)";
+            }
+
+            // Handle VIEW event intent
+            if (intent == IntentType.VIEW_EVENTS) {
+                return handleViewEvents(jsonNode);
             }
 
             // If no intent, proceed with regular chat
@@ -108,6 +113,7 @@ public class OpenAIAPIController {
             return "❌ Error: " + e.getMessage() + "\n\nCheck server logs for details.";
         }
     }
+
 
     private boolean isAffirmativeResponse(String response) {
         try {
@@ -129,12 +135,12 @@ public class OpenAIAPIController {
         }
     }
 
-
     private Event parseEventDetails(JsonNode jsonNode) {
         Event event = new Event();
         DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
 
         try {
+            event.setId(jsonNode.has("id") ? jsonNode.get("id").asText() : "N/A");
             event.setSummary(jsonNode.get("summary").asText("No Title"));
             event.setDescription(jsonNode.get("description").asText(""));
             event.setLocation(jsonNode.get("location").asText(""));
@@ -142,42 +148,20 @@ public class OpenAIAPIController {
             String startDateTime = jsonNode.get("start").asText();
             String endDateTime = jsonNode.get("end").asText();
 
-            System.out.println("🔹 Extracted Start Time: " + startDateTime);
-            System.out.println("🔹 Extracted End Time: " + endDateTime);
-
-            // Parse start time
-            LocalDateTime now = LocalDateTime.now();
-            LocalDateTime start = startDateTime != null && !startDateTime.isEmpty()
-                    ? LocalDateTime.parse(startDateTime, formatter)
-                    : now;
-
-            // If the start time is in the past, move it to the next future occurrence
-            if (start.isBefore(now)) {
-                System.err.println("🚨 Start time is in the past! Adjusting to future occurrence...");
-                start = start.plusYears(1);
-            }
-
-            // Parse end time or default to 1 hour later
-            LocalDateTime end;
-            if (endDateTime != null && !endDateTime.isEmpty()) {
-                end = LocalDateTime.parse(endDateTime, formatter);
-
-                // Ensure the end time is not before start
-                if (end.isBefore(start)) {
-                    System.err.println("🚨 End time is before start time! Adjusting...");
-                    end = start.plusHours(1);
-                }
+            if (startDateTime != null && !startDateTime.isEmpty()) {
+                event.setStart(LocalDateTime.parse(startDateTime, formatter));
             } else {
-                System.out.println("🔄 No end time provided. Defaulting to 1 hour after start.");
-                end = start.plusHours(1);
+                event.setStart(LocalDateTime.now());  // Default to now if not provided
             }
 
-            event.setStart(start);
-            event.setEnd(end);
-
+            if (endDateTime != null && !endDateTime.isEmpty()) {
+                event.setEnd(LocalDateTime.parse(endDateTime, formatter));
+            } else {
+                event.setEnd(event.getStart().plusHours(1));  // Default to 1 hour if not provided
+            }
         } catch (Exception e) {
             e.printStackTrace();
-            System.err.println("❌ Error parsing event details. Raw JSON: " + jsonNode.toPrettyString());
+            event.setId("N/A");
             event.setSummary("Default Event");
             event.setDescription("No Description");
             event.setLocation("No Location");
@@ -188,18 +172,44 @@ public class OpenAIAPIController {
         return event;
     }
 
-
-
-
-
-
-
-
     private String formatEventDetails(Event event) {
-        return "Summary: " + event.getSummary() + "\n" +
+        return "ID: " + event.getId() + "\n" +
+                "Summary: " + event.getSummary() + "\n" +
                 "Description: " + event.getDescription() + "\n" +
                 "Location: " + event.getLocation() + "\n" +
                 "Start: " + event.getStart().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + "\n" +
                 "End: " + event.getEnd().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
     }
+
+    private String handleViewEvents(JsonNode jsonNode) {
+        try {
+            String calendarId = calendarContext.getCalendarId();
+            String startDate = jsonNode.get("start").asText();
+            String endDate = jsonNode.get("end").asText();
+
+            System.out.println("📅 Extracted Date Range: " + startDate + " - " + endDate);
+
+            List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, startDate, endDate);
+
+            if (events.isEmpty()) {
+                return "📌 No events found from " + startDate + " to " + endDate;
+            }
+
+            StringBuilder response = new StringBuilder("📅 Events from " + startDate + " to " + endDate + ":\n");
+            for (Map<String, String> event : events) {
+                response.append("\n🔹 *ID: ").append(event.get("id")).append("*")
+                        .append("\n📌 Summary: ").append(event.get("summary"))
+                        .append("\n📍 Location: ").append(event.getOrDefault("location", "Not specified"))
+                        .append("\n🕒 Start: ").append(event.get("start"))
+                        .append("\n🕒 End: ").append(event.get("end"))
+                        .append("\n");
+            }
+
+            return response.toString();
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching events: " + e.getMessage());
+            return "❌ Failed to fetch events.";
+        }
+    }
+
 }
