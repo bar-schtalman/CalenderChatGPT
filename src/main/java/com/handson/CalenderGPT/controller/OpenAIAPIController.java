@@ -60,7 +60,7 @@ public class OpenAIAPIController {
             String extractedIntent = jsonNode.get("intent").asText();
             System.out.println("Extracted Intent from ChatGPT: " + extractedIntent);
 
-            // Try mapping to IntentType
+            // Map ChatGPT intent to our IntentType
             IntentType intent;
             switch (extractedIntent.toUpperCase()) {
                 case "CREATE":
@@ -79,12 +79,38 @@ public class OpenAIAPIController {
                     intent = IntentType.NONE;
             }
 
-            // If it's an event, return extracted details
+            // Handle VIEW intent: list all events for the user with their event id
+            if (intent == IntentType.VIEW_EVENTS) {
+                // Extract start and end dates from the JSON
+                String start = jsonNode.get("start").asText();
+                String end = jsonNode.get("end").asText();
+
+                // Retrieve calendar id from context
+                String calendarId = calendarContext.getCalendarId();
+
+                // Retrieve events in the specified date range
+                List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, start, end);
+
+                if (events.isEmpty()) {
+                    return "No events found between " + start + " and " + end + ".";
+                }
+
+                StringBuilder response = new StringBuilder("Events between " + start + " and " + end + ":\n");
+                for (Map<String, String> event : events) {
+                    response.append("Event ID: ").append(event.get("id"))
+                            .append(" - Date: ").append(event.get("start"))
+                            .append(" - Summary: ").append(event.get("summary"))
+                            .append("\n");
+                }
+                return response.toString();
+            }
+
+            // For other event-related intents (CREATE, EDIT, DELETE), return the extracted details
             if (intent != IntentType.NONE) {
                 return "Detected Intent: " + intent.name() + "\n\nExtracted Details:\n" + jsonNode.toPrettyString();
             }
 
-            // If no intent, proceed with regular chat
+            // If no event intent is detected, process as regular chat
             return chatWithGPT(prompt);
 
         } catch (Exception e) {
@@ -92,6 +118,7 @@ public class OpenAIAPIController {
             return "❌ Error: " + e.getMessage() + "\n\nCheck server logs for details.";
         }
     }
+
     private String chatWithGPT(String prompt) {
         conversationHistory.add(new Message("user", prompt));
 
