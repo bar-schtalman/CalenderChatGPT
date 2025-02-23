@@ -11,6 +11,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -121,14 +123,18 @@ public class IntentService {
      * Extracts details from the user input using ChatGPT.
      */
     public String extractDetailsFromPrompt(String prompt) {
+        String today = LocalDateTime.now().format(DateTimeFormatter.ISO_DATE);
+
         String extractionPrompt = "Analyze the following text and determine if it represents an event-related request (Create, Edit, Delete, View). " +
                 "If it is event-related, return structured JSON with fields: " +
                 "'intent' (CREATE, EDIT, DELETE, VIEW), " +
                 "'summary', 'description', 'start', 'end', 'location'. " +
-                "Ensure 'start' and 'end' are in ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSZ). " +
-                "If 'end' is not provided, set it to 1 hour after 'start'. " +
-                "If the intent is NOT event-related, return a simple JSON object: {\"intent\": \"NONE\", \"message\": \"response text\"}. " +
-                "Do NOT wrap the response in markdown code blocks or triple backticks (`). " +  // Prevent wrapping in ```json
+                "Ensure 'start' and 'end' are in **ISO 8601 format** (YYYY-MM-DDTHH:MM:SS.SSSZ). " +
+                "**If the provided date is in the past, adjust it to the next valid occurrence in the future.** " +
+                "**Ensure 'end' is always after 'start'.** If 'end' is missing, set it to **1 hour after 'start'**. " +
+                "**If only a day of the week is provided (e.g., 'next Friday'), determine the exact date in the future.** " +
+                "If the intent is NOT event-related, return {'intent': 'NONE', 'message': 'response text'}. " +
+                "Today's date is " + today + ". " +
                 "Text: \"" + prompt + "\"";
 
         ChatGPTRequest extractionRequest = new ChatGPTRequest();
@@ -139,25 +145,16 @@ public class IntentService {
         extractionRequest.setMessages(messages);
 
         ChatGPTResponse response = template.postForObject(url, extractionRequest, ChatGPTResponse.class);
-        String rawResponse = response.getChoices().get(0).getMessage().getContent().trim();
+        String rawResponse = response.getChoices().get(0).getMessage().getContent();
 
         System.out.println("🛠 Raw Response from ChatGPT:\n" + rawResponse);
 
-        // Ensure we are parsing JSON correctly
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode jsonNode;
-
-        try {
-            jsonNode = mapper.readTree(rawResponse);
-        } catch (Exception e) {
-            // If parsing fails, assume it's a plain message and wrap it in a valid JSON object
-            System.out.println("⚠️ Raw response was not valid JSON, treating as plain text.");
-            jsonNode = mapper.createObjectNode()
-                    .put("intent", "NONE")
-                    .put("message", rawResponse);
+        // Strip markdown-style JSON block if present
+        if (rawResponse.startsWith("```json")) {
+            rawResponse = rawResponse.replace("```json", "").replace("```", "").trim();
         }
 
-        return jsonNode.toString();
+        return rawResponse;
     }
 
 
@@ -212,4 +209,22 @@ public class IntentService {
                 "  \"location\": \"" + location + "\"\n" +
                 "}";
     }
+
+    private String buildExtractionPrompt(String prompt, IntentType intent) {
+        switch (intent) {
+            case VIEW_EVENTS:
+                return "Analyze the following text and extract a date range for viewing events. " +
+                        "Return JSON with fields: " +
+                        "'intent' (VIEW), " +
+                        "'start' (in ISO 8601 format), " +
+                        "'end' (in ISO 8601 format). " +
+                        "If only a single date is provided, set 'end' to the same date. " +
+                        "Ensure dates are in the future if necessary. " +
+                        "Text: \"" + prompt + "\"";
+
+            default:
+                return "Analyze the following prompt and respond accordingly: \"" + prompt + "\"";
+        }
+    }
+
 }
