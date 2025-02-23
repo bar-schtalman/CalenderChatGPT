@@ -106,7 +106,6 @@ public class OpenAIAPIController {
 
         return assistantReply;
     }
-    //32/
 
 
 
