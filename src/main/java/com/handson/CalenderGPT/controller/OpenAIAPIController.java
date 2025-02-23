@@ -49,19 +49,6 @@ public class OpenAIAPIController {
     @GetMapping("/chat")
     public String chat(@RequestParam("prompt") String prompt) {
         try {
-            // Check for pending event confirmation
-            if (pendingEvent != null) {
-                if (isAffirmativeResponse(prompt)) {
-                    String calendarId = calendarContext.getCalendarId();
-                    String eventResponse = eventService.createEvent(calendarId, pendingEvent);
-                    pendingEvent = null; // Reset after confirmation
-                    return "✅ Event created successfully:\n" + eventResponse;
-                } else {
-                    pendingEvent = null; // Reset if user cancels
-                    return "❌ Event creation canceled. Continuing chat...";
-                }
-            }
-
             String extractedJson = intentService.extractDetailsFromPrompt(prompt);
 
             // Debugging Logs
@@ -92,61 +79,51 @@ public class OpenAIAPIController {
                     intent = IntentType.NONE;
             }
 
-            // Handle CREATE event intent
-            if (intent == IntentType.CREATE_EVENT) {
-                pendingEvent = parseEventDetails(jsonNode);
-                return "Detected Intent: " + intent.name() + "\n\nYou are about to create the following event:\n" +
-                        formatEventDetails(pendingEvent) +
-                        "\nDo you want to proceed? (yes/no)";
-            }
-
-            // Handle VIEW event intent
-            if (intent == IntentType.VIEW_EVENTS) {
-                return handleViewEvents(jsonNode);
+            // If it's an event, return extracted details
+            if (intent != IntentType.NONE) {
+                return "Detected Intent: " + intent.name() + "\n\nExtracted Details:\n" + jsonNode.toPrettyString();
             }
 
             // If no intent, proceed with regular chat
-            return jsonNode.has("message") ? jsonNode.get("message").asText() : "Could not process request.";
+            return chatWithGPT(prompt);
 
         } catch (Exception e) {
             System.out.println("❌ Error processing request: " + e.getMessage());
             return "❌ Error: " + e.getMessage() + "\n\nCheck server logs for details.";
         }
     }
+    private String chatWithGPT(String prompt) {
+        conversationHistory.add(new Message("user", prompt));
 
+        ChatGPTRequest chatGPTRequest = new ChatGPTRequest();
+        chatGPTRequest.setModel(model);
+        chatGPTRequest.setMessages(conversationHistory);
 
-    private boolean isAffirmativeResponse(String response) {
-        try {
-            String analysisPrompt = "Analyze the following text and determine if it expresses agreement. " +
-                    "Respond only with 'yes' or 'no'. Text: \"" + response + "\"";
+        ChatGPTResponse chatGPTResponse = template.postForObject(url, chatGPTRequest, ChatGPTResponse.class);
+        String assistantReply = chatGPTResponse.getChoices().get(0).getMessage().getContent();
 
-            ChatGPTRequest request = new ChatGPTRequest();
-            request.setModel(model);
-            List<Message> messages = new ArrayList<>();
-            messages.add(new Message("system", analysisPrompt));
-            request.setMessages(messages);
+        conversationHistory.add(new Message("assistant", assistantReply));
 
-            ChatGPTResponse chatGPTResponse = template.postForObject(url, request, ChatGPTResponse.class);
-            String result = chatGPTResponse.getChoices().get(0).getMessage().getContent().trim().toLowerCase();
-            return "yes".equals(result);
-        } catch (Exception e) {
-            System.err.println("❌ Error determining user response: " + e.getMessage());
-            return false;
-        }
+        return assistantReply;
     }
 
-    private Event parseEventDetails(JsonNode jsonNode) {
+
+
+
+    // Updated method to parse extracted details into an Event object
+    private Event parseEventDetails(String extractedDetails) {
+        ObjectMapper mapper = new ObjectMapper();
         Event event = new Event();
         DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
 
         try {
-            event.setId(jsonNode.has("id") ? jsonNode.get("id").asText() : "N/A");
-            event.setSummary(jsonNode.get("summary").asText("No Title"));
-            event.setDescription(jsonNode.get("description").asText(""));
-            event.setLocation(jsonNode.get("location").asText(""));
+            Map<String, String> detailsMap = mapper.readValue(extractedDetails, Map.class);
+            event.setSummary(detailsMap.getOrDefault("summary", "No Title"));
+            event.setDescription(detailsMap.getOrDefault("description", ""));
+            event.setLocation(detailsMap.getOrDefault("location", ""));
 
-            String startDateTime = jsonNode.get("start").asText();
-            String endDateTime = jsonNode.get("end").asText();
+            String startDateTime = detailsMap.get("start");
+            String endDateTime = detailsMap.get("end");
 
             if (startDateTime != null && !startDateTime.isEmpty()) {
                 event.setStart(LocalDateTime.parse(startDateTime, formatter));
@@ -159,9 +136,10 @@ public class OpenAIAPIController {
             } else {
                 event.setEnd(event.getStart().plusHours(1));  // Default to 1 hour if not provided
             }
+
         } catch (Exception e) {
             e.printStackTrace();
-            event.setId("N/A");
+            // Fallback in case parsing fails
             event.setSummary("Default Event");
             event.setDescription("No Description");
             event.setLocation("No Location");
@@ -172,44 +150,12 @@ public class OpenAIAPIController {
         return event;
     }
 
+    // Format event details for confirmation message
     private String formatEventDetails(Event event) {
-        return "ID: " + event.getId() + "\n" +
-                "Summary: " + event.getSummary() + "\n" +
+        return "Summary: " + event.getSummary() + "\n" +
                 "Description: " + event.getDescription() + "\n" +
                 "Location: " + event.getLocation() + "\n" +
                 "Start: " + event.getStart().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + "\n" +
                 "End: " + event.getEnd().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
     }
-
-    private String handleViewEvents(JsonNode jsonNode) {
-        try {
-            String calendarId = calendarContext.getCalendarId();
-            String startDate = jsonNode.get("start").asText();
-            String endDate = jsonNode.get("end").asText();
-
-            System.out.println("📅 Extracted Date Range: " + startDate + " - " + endDate);
-
-            List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, startDate, endDate);
-
-            if (events.isEmpty()) {
-                return "📌 No events found from " + startDate + " to " + endDate;
-            }
-
-            StringBuilder response = new StringBuilder("📅 Events from " + startDate + " to " + endDate + ":\n");
-            for (Map<String, String> event : events) {
-                response.append("\n🔹 *ID: ").append(event.get("id")).append("*")
-                        .append("\n📌 Summary: ").append(event.get("summary"))
-                        .append("\n📍 Location: ").append(event.getOrDefault("location", "Not specified"))
-                        .append("\n🕒 Start: ").append(event.get("start"))
-                        .append("\n🕒 End: ").append(event.get("end"))
-                        .append("\n");
-            }
-
-            return response.toString();
-        } catch (Exception e) {
-            System.err.println("❌ Error fetching events: " + e.getMessage());
-            return "❌ Failed to fetch events.";
-        }
-    }
-
 }
