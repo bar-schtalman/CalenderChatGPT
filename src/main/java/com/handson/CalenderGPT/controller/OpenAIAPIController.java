@@ -11,6 +11,7 @@ import com.handson.CalenderGPT.service.IntentService;
 import com.handson.CalenderGPT.context.CalendarContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -19,6 +20,12 @@ import java.util.Map;
 
 @RestController
 public class OpenAIAPIController {
+
+    // Common DateTimeFormatters
+    private static final DateTimeFormatter INPUT_FORMATTER = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
+    private static final DateTimeFormatter OUTPUT_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final DateTimeFormatter OUTPUT_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_DATE_TIME;
 
     @Autowired
     private IntentService intentService;
@@ -78,8 +85,7 @@ public class OpenAIAPIController {
         }
     }
 
-    // Handles VIEW intent: builds a response listing events with their id, date, and summary,
-// and adds a system message to the conversation history.
+    // Handles VIEW intent: builds a response listing events with formatted date, time, and summary.
     private String handleViewEvents(JsonNode jsonNode) throws Exception {
         String start = jsonNode.get("start").asText();
         String end = jsonNode.get("end").asText();
@@ -90,14 +96,6 @@ public class OpenAIAPIController {
             return "No events found between " + start + " and " + end + ".";
         }
 
-        // Define input formatter for the eventService output.
-        // Assuming the events are returned as "dd-MM-yyyy HH:mm" (e.g., "07-02-2025 01:36")
-        DateTimeFormatter inputFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
-        // Define output formatters for display.
-        DateTimeFormatter outputDateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-        DateTimeFormatter outputTimeFormatter = DateTimeFormatter.ofPattern("HH:mm");
-
-
         StringBuilder response = new StringBuilder("Events between " + start + " and " + end + ":\n");
         for (Map<String, String> event : events) {
             String eventStartStr = event.get("start");
@@ -106,55 +104,53 @@ public class OpenAIAPIController {
             LocalDateTime startDateTime;
             LocalDateTime endDateTime;
             try {
-                startDateTime = LocalDateTime.parse(eventStartStr, inputFormatter);
-                endDateTime = LocalDateTime.parse(eventEndStr, inputFormatter);
+                startDateTime = LocalDateTime.parse(eventStartStr, INPUT_FORMATTER);
+                endDateTime = LocalDateTime.parse(eventEndStr, INPUT_FORMATTER);
             } catch (Exception e) {
-                // If parsing fails, skip this event or handle as needed.
+                // If parsing fails, skip this event.
                 continue;
             }
 
-            String formattedDate = startDateTime.format(outputDateFormatter);
-            String formattedStartTime = startDateTime.format(outputTimeFormatter);
-            String formattedEndTime = endDateTime.format(outputTimeFormatter);
+            String formattedDate = startDateTime.format(OUTPUT_DATE_FORMATTER);
+            String formattedStartTime = startDateTime.format(OUTPUT_TIME_FORMATTER);
+            String formattedEndTime = endDateTime.format(OUTPUT_TIME_FORMATTER);
 
-            response.append(" - Date: ").append(formattedDate)
-                    .append(" - Time: ").append(formattedStartTime).append(" - ").append(formattedEndTime)
+            response.append("Event ID: ").append(event.get("id"))
+                    .append(" - Date: ").append(formattedDate)
+                    .append(" - Time: ").append(formattedStartTime)
+                    .append(" - ").append(formattedEndTime)
                     .append(" - Summary: ").append(event.get("summary"))
                     .append("\n");
         }
+
+        // Add a system message to conversation history with view details.
+        conversationHistory.add(new Message("system", "Viewed events between " + start + " and " + end + "."));
         return response.toString();
     }
 
-
-
-
-    // Handles CREATE intent: parses event details, creates the event, and returns a confirmation.
-// Handles CREATE intent: parses event details, creates the event, adds context, and returns a confirmation.
+    // Handles CREATE intent: parses event details, creates the event, adds context, and returns a confirmation.
     private String handleCreateEvent(JsonNode jsonNode) throws Exception {
         Event event = parseEventDetails(jsonNode);
         String calendarId = calendarContext.getCalendarId();
         String eventResponse = eventService.createEvent(calendarId, event);
 
-        // Format the event's start date and time for clarity.
-        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
-        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
-        String eventDate = event.getStart().format(dateFormatter);
-        String eventStartTime = event.getStart().format(timeFormatter);
-        String eventEndTime = event.getEnd().format(timeFormatter);
+        String eventDate = event.getStart().format(OUTPUT_DATE_FORMATTER);
+        String eventStartTime = event.getStart().format(OUTPUT_TIME_FORMATTER);
+        String eventEndTime = event.getEnd().format(OUTPUT_TIME_FORMATTER);
 
+        String confirmationMessage = event.getSummary() + " Event created successfully: at "
+                + eventDate + ", " + eventStartTime + " - " + eventEndTime;
         // Add a system message to the conversation history with event details.
         conversationHistory.add(new Message("system", "Event created: "
                 + event.getSummary() + " at " + event.getLocation()
                 + " on " + eventDate + " starting at " + eventStartTime + "."));
 
-        return event.getSummary() + " Event created successfully: at "+eventDate +" ,"+eventStartTime+" - "+eventEndTime+"\n" + eventResponse;
+        return confirmationMessage + "\n" + eventResponse;
     }
-
 
     // Parses event details from the JSON and builds an Event object.
     private Event parseEventDetails(JsonNode jsonNode) {
         Event event = new Event();
-        DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
         try {
             event.setId(jsonNode.has("id") ? jsonNode.get("id").asText() : "N/A");
             event.setSummary(jsonNode.get("summary").asText("No Title"));
@@ -165,19 +161,19 @@ public class OpenAIAPIController {
             String endDateTime = jsonNode.get("end").asText();
 
             if (startDateTime != null && !startDateTime.isEmpty()) {
-                event.setStart(LocalDateTime.parse(startDateTime, formatter));
+                event.setStart(LocalDateTime.parse(startDateTime, ISO_FORMATTER));
             } else {
                 event.setStart(LocalDateTime.now());
             }
 
             if (endDateTime != null && !endDateTime.isEmpty()) {
-                event.setEnd(LocalDateTime.parse(endDateTime, formatter));
+                event.setEnd(LocalDateTime.parse(endDateTime, ISO_FORMATTER));
             } else {
                 event.setEnd(event.getStart().plusHours(1));
             }
         } catch (Exception e) {
             e.printStackTrace();
-            // Use fallback values if parsing fails
+            // Use fallback values if parsing fails.
             event.setId("N/A");
             event.setSummary("Default Event");
             event.setDescription("No Description");
