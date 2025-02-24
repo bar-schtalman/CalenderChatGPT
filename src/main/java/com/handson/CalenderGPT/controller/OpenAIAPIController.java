@@ -39,6 +39,7 @@ public class OpenAIAPIController {
     @Autowired
     private ChatGPTService chatGPTService;
 
+    // Conversation history still stores all messages (for context with ChatGPT)
     private final List<Message> conversationHistory = new ArrayList<>();
 
     @GetMapping("/chat")
@@ -85,54 +86,64 @@ public class OpenAIAPIController {
         }
     }
 
-    // Handles VIEW intent: builds a response listing events with formatted date, time, and summary.
+    // Handles VIEW intent: builds a response listing events with formatted date, time, summary, and location (if provided).
     private String handleViewEvents(JsonNode jsonNode) throws Exception {
         String start = jsonNode.get("start").asText();
         String end = jsonNode.get("end").asText();
         String calendarId = calendarContext.getCalendarId();
 
         List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, start, end);
+        List<Message> viewMessages = new ArrayList<>();
+
         if (events.isEmpty()) {
-            return "No events found between " + start + " and " + end + ".";
-        }
+            viewMessages.add(new Message("assistant", "No events found between " + start + " and " + end + "."));
+        } else {
+            for (Map<String, String> event : events) {
+                String eventStartStr = event.get("start");
+                String eventEndStr = event.get("end");
 
-        StringBuilder response = new StringBuilder("Events between " + start + " and " + end + ":\n");
-        for (Map<String, String> event : events) {
-            String eventStartStr = event.get("start");
-            String eventEndStr = event.get("end");
+                LocalDateTime startDateTime;
+                LocalDateTime endDateTime;
+                try {
+                    startDateTime = LocalDateTime.parse(eventStartStr, INPUT_FORMATTER);
+                    endDateTime = LocalDateTime.parse(eventEndStr, INPUT_FORMATTER);
+                } catch (Exception e) {
+                    // Skip events that cannot be parsed
+                    continue;
+                }
 
-            LocalDateTime startDateTime;
-            LocalDateTime endDateTime;
-            try {
-                startDateTime = LocalDateTime.parse(eventStartStr, INPUT_FORMATTER);
-                endDateTime = LocalDateTime.parse(eventEndStr, INPUT_FORMATTER);
-            } catch (Exception e) {
-                // If parsing fails, skip this event.
-                continue;
+                String formattedDate = startDateTime.format(OUTPUT_DATE_FORMATTER);
+                String formattedStartTime = startDateTime.format(OUTPUT_TIME_FORMATTER);
+                String formattedEndTime = endDateTime.format(OUTPUT_TIME_FORMATTER);
+
+                // Build the message without the event ID.
+                String eventMessage = "Summary: " + event.get("summary")
+                        + " - Date: " + formattedDate
+                        + " - Time: " + formattedStartTime + " - " + formattedEndTime;
+                String location = event.get("location");
+                if (location != null && !location.trim().isEmpty()) {
+                    eventMessage += " - Location: " + location;
+                }
+
+                viewMessages.add(new Message("assistant", eventMessage));
             }
-
-            String formattedDate = startDateTime.format(OUTPUT_DATE_FORMATTER);
-            String formattedStartTime = startDateTime.format(OUTPUT_TIME_FORMATTER);
-            String formattedEndTime = endDateTime.format(OUTPUT_TIME_FORMATTER);
-
-            response.append("Event ID: ").append(event.get("id"))
-                    .append(" - Date: ").append(formattedDate)
-                    .append(" - Time: ").append(formattedStartTime)
-                    .append(" - ").append(formattedEndTime)
-                    .append(" - Summary: ").append(event.get("summary"))
-                    .append("\n");
         }
 
-        // Add a system message to conversation history with view details.
+        // Optionally, add an overall system message to the conversation history.
+        conversationHistory.addAll(viewMessages);
         conversationHistory.add(new Message("system", "Viewed events between " + start + " and " + end + "."));
-        return response.toString();
+
+        // Return the JSON array of messages.
+        ObjectMapper mapper = new ObjectMapper();
+        return mapper.writeValueAsString(viewMessages);
     }
 
     // Handles CREATE intent: parses event details, creates the event, adds context, and returns a confirmation.
     private String handleCreateEvent(JsonNode jsonNode) throws Exception {
         Event event = parseEventDetails(jsonNode);
         String calendarId = calendarContext.getCalendarId();
-        String eventResponse = eventService.createEvent(calendarId, event);
+        // Create the event and get response from the API (this part is now not returned to the user).
+        eventService.createEvent(calendarId, event);
 
         String eventDate = event.getStart().format(OUTPUT_DATE_FORMATTER);
         String eventStartTime = event.getStart().format(OUTPUT_TIME_FORMATTER);
@@ -145,7 +156,8 @@ public class OpenAIAPIController {
                 + event.getSummary() + " at " + event.getLocation()
                 + " on " + eventDate + " starting at " + eventStartTime + "."));
 
-        return confirmationMessage + "\n" + eventResponse;
+        // Return only the confirmation message, without the Google API response.
+        return confirmationMessage;
     }
 
     // Parses event details from the JSON and builds an Event object.
@@ -185,12 +197,18 @@ public class OpenAIAPIController {
     }
 
     // Delegates non-event prompts to ChatGPT using the shared service.
+// Delegates non-event prompts to ChatGPT using the shared service.
     private String chatWithGPT(String prompt) {
         conversationHistory.add(new Message("user", prompt));
         List<Message> messages = new ArrayList<>(conversationHistory);
         String assistantReply = chatGPTService.callChatGPT(messages)
                 .getChoices().get(0).getMessage().getContent();
+
+        // Ensures response is returned as a single message (no line breaks)
+        assistantReply = assistantReply.replaceAll("\\n+", " ");
+
         conversationHistory.add(new Message("assistant", assistantReply));
         return assistantReply;
     }
+
 }

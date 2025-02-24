@@ -35,7 +35,8 @@
       background-color: #dcf8c6;
       float: right;
     }
-    .message.ai {
+    /* Update: style both .ai and .assistant for proper background */
+    .message.ai, .message.assistant {
       background-color: #eee;
       float: left;
     }
@@ -111,7 +112,23 @@
         method: "GET",
         data: { prompt: message },
         success: function(response) {
-          appendMessage("ai", response);
+          try {
+            var parsed = JSON.parse(response);
+            if (Array.isArray(parsed)) {
+              parsed.forEach(function(msg) {
+                appendMessage(msg.role, msg.content);
+              });
+            } else {
+              appendMessage("ai", response);
+            }
+          } catch (e) {
+            var lines = response.split("\n");
+            lines.forEach(function(line) {
+              if (line.trim() !== "") {
+                appendMessage("ai", line);
+              }
+            });
+          }
         },
         error: function() {
           appendMessage("ai", "Sorry, there was an error processing your request.");
@@ -124,6 +141,6 @@
       $("#chatWindow").append(msgDiv).append("<div class='clear'></div>");
       $("#chatWindow").scrollTop($("#chatWindow")[0].scrollHeight);
     }
-  </script>
+</script>
 </body>
 </html>
