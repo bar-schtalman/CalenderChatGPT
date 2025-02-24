@@ -8,6 +8,8 @@ import com.handson.CalenderGPT.model.Message;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -16,6 +18,11 @@ import java.util.List;
 @Service
 public class IntentService {
 
+    LocalDate todayDate = LocalDate.now();
+    String today = todayDate.format(DateTimeFormatter.ISO_DATE);
+    String tomorrow = todayDate.plusDays(1).format(DateTimeFormatter.ISO_DATE);
+    String nextWeek = todayDate.plusWeeks(1).format(DateTimeFormatter.ISO_DATE);
+
     @Value("${openai.model}")
     private String model;
 
@@ -23,7 +30,6 @@ public class IntentService {
     // since we'll use ChatGPTService instead.
 
     private final ChatGPTService chatGPTService;
-    String today = LocalDateTime.now().format(DateTimeFormatter.ISO_DATE);
 
     public IntentService(ChatGPTService chatGPTService) {
         this.chatGPTService = chatGPTService;
@@ -35,11 +41,14 @@ public class IntentService {
                 "\"intent\" (CREATE, EDIT, DELETE, VIEW), \"summary\", \"description\", \"start\", \"end\", \"location\". " +
                 "Ensure \"start\" and \"end\" are in ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSZ). " +
                 "If \"end\" is not provided, set it to 1 hour after \"start\". " +
-                "Consider that today's date is " + today + ". " +
-                "If the provided \"start\" date is in the past relative to today's date, adjust it to the next valid occurrence (for example, if the event is annual, use the same day and time next year). " +
+                "Consider that today's date is " + today + ", tomorrow's date is " + tomorrow + ", and the date one week from today is " + nextWeek + ". " +
+                "If the provided \"start\" date is in the past relative to today's date, adjust it to the next valid occurrence by adding one year (i.e., ensure the event is always scheduled in the future). " +
                 "If the intent is NOT event-related, return a simple JSON object: {\"intent\": \"NONE\", \"message\": \"response text\"}. " +
                 "Do NOT wrap the response in markdown code blocks or triple backticks (`). " +
                 "Text: \"" + prompt + "\"";
+
+
+
 
 
         List<Message> messages = new ArrayList<>();
