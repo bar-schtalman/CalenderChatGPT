@@ -4,10 +4,14 @@
     <meta charset="UTF-8">
     <title>Chat with AI</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+
     <style>
+    /* General body styling */
     body {
       background-color: #f7f7f7;
     }
+
+    /* Chat container */
     .chat-container {
       max-width: 800px;
       margin: 50px auto;
@@ -16,6 +20,8 @@
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
       padding: 20px;
     }
+
+    /* Chat window */
     .chat-window {
       height: 400px;
       overflow-y: auto;
@@ -24,6 +30,8 @@
       margin-bottom: 20px;
       background: #fafafa;
     }
+
+    /* Chat messages */
     .message {
       margin-bottom: 10px;
       padding: 8px 12px;
@@ -31,51 +39,85 @@
       max-width: 70%;
       display: inline-block;
     }
+
+    /* User messages */
     .message.user {
       background-color: #dcf8c6;
       float: right;
     }
-    /* Update: style both .ai and .assistant for proper background */
+
+    /* AI messages */
     .message.ai, .message.assistant {
       background-color: #eee;
       float: left;
     }
+
+    /* Clears float */
     .clear {
       clear: both;
     }
-    .login-container {
-      max-width: 400px;
-      margin: 100px auto;
-      background: #fff;
-      padding: 30px;
-      border-radius: 8px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+
+    /* Event card */
+    .event-card {
+      background-color: #ffffff;
+      border-radius: 10px;
+      padding: 15px;
+      margin: 10px 0;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      border-left: 5px solid #007bff;
+      position: relative;
+      padding-right: 30px;
+      display: flex;
+      flex-direction: column;
     }
-  </style>
+
+    /* Event summary */
+    .event-summary {
+      font-weight: bold;
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+
+    /* Event date and time */
+    .event-date {
+      font-size: 14px;
+      color: #777;
+    }
+
+    /* Delete button */
+.delete-event {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #ff4d4d; /* Softer red */
+  color: white;
+  border: none;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  border-radius: 50%; /* Ensures circular shape */
+  font-size: 18px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.3s ease-in-out, transform 0.2s ease;
+}
+
+/* Hover effect */
+.delete-event:hover {
+  background: #cc0000; /* Darker red on hover */
+  transform: scale(1.1); /* Slight zoom effect */
+}
+
+    </style>
 </head>
 <body>
-<!-- Login Page -->
-<div id="loginPage" class="login-container">
-    <h2 class="text-center">Login</h2>
-    <form id="loginForm">
-        <div class="form-group">
-            <label for="username">Username</label>
-            <input type="text" class="form-control" id="username" placeholder="Enter username" required>
-        </div>
-        <div class="form-group">
-            <label for="password">Password</label>
-            <input type="password" class="form-control" id="password" placeholder="Enter password" required>
-        </div>
-        <button type="submit" class="btn btn-primary btn-block">Login</button>
-    </form>
-</div>
 
-<!-- Chat Page -->
-<div id="chatPage" class="chat-container" style="display: none;">
+<!-- Chat Page (No Login, Loads Immediately) -->
+<div id="chatPage" class="chat-container">
     <h2 class="text-center">Chat with AI</h2>
-    <div id="chatWindow" class="chat-window">
-        <!-- Chat messages will appear here -->
-    </div>
+    <div id="chatWindow" class="chat-window"></div>
     <form id="chatForm">
         <div class="input-group">
             <input type="text" class="form-control" id="chatInput" placeholder="Type your message..." required>
@@ -89,58 +131,94 @@
 <!-- JS Dependencies -->
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script>
-    // Simulated login process
-    $("#loginForm").on("submit", function(e) {
-      e.preventDefault();
-      // In a real app, you'd validate credentials here.
-      $("#loginPage").hide();
-      $("#chatPage").show();
-    });
-
     // Chat functionality
     $("#chatForm").on("submit", function(e) {
-      e.preventDefault();
-      var message = $("#chatInput").val().trim();
-      if (message === "") return;
+        e.preventDefault();
+        var message = $("#chatInput").val().trim();
+        if (message === "") return;
 
-      appendMessage("user", message);
-      $("#chatInput").val("");
+        appendMessage("user", message); // Show user message
+        $("#chatInput").val("");
 
-      // Send the message to your backend
-      $.ajax({
-        url: "/chat",
-        method: "GET",
-        data: { prompt: message },
-        success: function(response) {
-          try {
-            var parsed = JSON.parse(response);
-            if (Array.isArray(parsed)) {
-              parsed.forEach(function(msg) {
-                appendMessage(msg.role, msg.content);
-              });
-            } else {
-              appendMessage("ai", response);
+        // Send request to backend
+        $.ajax({
+            url: "/chat",
+            method: "GET",
+            data: { prompt: message },
+            success: function(response) {
+                try {
+                    var parsed = JSON.parse(response);
+                    var isViewIntent = parsed.some(msg => msg.role === "event");
+
+                    if (isViewIntent) {
+                        parsed.forEach(function(msg) {
+                            if (msg.role === "event") {
+                                appendEvent(msg);
+                            }
+                        });
+                    } else {
+                        parsed.forEach(function(msg) {
+                            appendMessage(msg.role, msg.content);
+                        });
+                    }
+                } catch (e) {
+                    var lines = response.split("\n");
+                    lines.forEach(function(line) {
+                        if (line.trim() !== "") {
+                            appendMessage("ai", line);
+                        }
+                    });
+                }
+            },
+            error: function() {
+                appendMessage("ai", "Sorry, there was an error processing your request.");
             }
-          } catch (e) {
-            var lines = response.split("\n");
-            lines.forEach(function(line) {
-              if (line.trim() !== "") {
-                appendMessage("ai", line);
-              }
-            });
-          }
-        },
-        error: function() {
-          appendMessage("ai", "Sorry, there was an error processing your request.");
-        }
-      });
+        });
     });
 
+    // Append normal messages
     function appendMessage(sender, text) {
-      var msgDiv = $("<div></div>").addClass("message " + sender).text(text);
-      $("#chatWindow").append(msgDiv).append("<div class='clear'></div>");
-      $("#chatWindow").scrollTop($("#chatWindow")[0].scrollHeight);
+        var msgDiv = $("<div></div>").addClass("message " + sender).text(text);
+        $("#chatWindow").append(msgDiv).append("<div class='clear'></div>");
+        $("#chatWindow").scrollTop($("#chatWindow")[0].scrollHeight);
     }
+
+function appendEvent(event) {
+    var eventCard = $("<div></div>").addClass("event-card");
+    eventCard.append("<div class='event-summary'>" + event.summary + "</div>");
+    eventCard.append("<div class='event-date'>📅 " + event.date + " ⏰ " + event.time + "</div>");
+    if (event.location && event.location !== "No location") {
+        eventCard.append("<div>📍 " + event.location + "</div>");
+    }
+
+    var deleteBtn = $("<button></button>")
+        .addClass("delete-event")
+        .text("X")
+        .on("click", function() {
+            deleteEvent(event.calendarId, event.id, $(this).parent()); // ✅ Pass correct `calendarId`
+        });
+
+    eventCard.append(deleteBtn);
+    $("#chatWindow").append(eventCard);
+    $("#chatWindow").scrollTop($("#chatWindow")[0].scrollHeight);
+}
+
+
+// Delete event from backend
+function deleteEvent(calendarId, eventId, eventElement) {
+    $.ajax({
+        url: `/api/google-calendar/calendars/${calendarId}/events/${eventId}`, // ✅ Correct URL format
+        method: "DELETE",
+        success: function(response) {
+            eventElement.remove(); // ✅ Remove event card from UI
+            alert("Event deleted successfully!");
+        },
+        error: function(xhr) {
+            alert("Error deleting event: " + xhr.responseText);
+        }
+    });
+}
+
 </script>
 </body>
 </html>

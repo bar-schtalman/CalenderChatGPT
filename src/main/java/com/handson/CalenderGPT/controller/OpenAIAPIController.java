@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -90,52 +91,28 @@ public class OpenAIAPIController {
     private String handleViewEvents(JsonNode jsonNode) throws Exception {
         String start = jsonNode.get("start").asText();
         String end = jsonNode.get("end").asText();
-        String calendarId = calendarContext.getCalendarId();
+        String calendarId = calendarContext.getCalendarId(); // ✅ Get Calendar ID
 
         List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, start, end);
-        List<Message> viewMessages = new ArrayList<>();
-
         if (events.isEmpty()) {
-            viewMessages.add(new Message("assistant", "No events found between " + start + " and " + end + "."));
-        } else {
-            for (Map<String, String> event : events) {
-                String eventStartStr = event.get("start");
-                String eventEndStr = event.get("end");
-
-                LocalDateTime startDateTime;
-                LocalDateTime endDateTime;
-                try {
-                    startDateTime = LocalDateTime.parse(eventStartStr, INPUT_FORMATTER);
-                    endDateTime = LocalDateTime.parse(eventEndStr, INPUT_FORMATTER);
-                } catch (Exception e) {
-                    // Skip events that cannot be parsed
-                    continue;
-                }
-
-                String formattedDate = startDateTime.format(OUTPUT_DATE_FORMATTER);
-                String formattedStartTime = startDateTime.format(OUTPUT_TIME_FORMATTER);
-                String formattedEndTime = endDateTime.format(OUTPUT_TIME_FORMATTER);
-
-                // Build the message without the event ID.
-                String eventMessage = "Summary: " + event.get("summary")
-                        + " - Date: " + formattedDate
-                        + " - Time: " + formattedStartTime + " - " + formattedEndTime;
-                String location = event.get("location");
-                if (location != null && !location.trim().isEmpty()) {
-                    eventMessage += " - Location: " + location;
-                }
-
-                viewMessages.add(new Message("assistant", eventMessage));
-            }
+            return "[{\"role\": \"ai\", \"content\": \"No events found between " + start + " and " + end + ".\"}]";
         }
 
-        // Optionally, add an overall system message to the conversation history.
-        conversationHistory.addAll(viewMessages);
-        conversationHistory.add(new Message("system", "Viewed events between " + start + " and " + end + "."));
+        List<Map<String, String>> responseList = new ArrayList<>();
+        for (Map<String, String> event : events) {
+            Map<String, String> eventData = new HashMap<>();
+            eventData.put("role", "event");
+            eventData.put("summary", event.get("summary"));
+            eventData.put("date", event.get("start").split(" ")[0]); // Extract date only
+            eventData.put("time", event.get("start").split(" ")[1] + " - " + event.get("end").split(" ")[1]); // Extract time range
+            eventData.put("location", event.getOrDefault("location", "No location"));
+            eventData.put("calendarId", calendarId); // ✅ Include Calendar ID
+            eventData.put("id", event.get("id")); // ✅ Ensure Event ID is included
+            responseList.add(eventData);
+        }
 
-        // Return the JSON array of messages.
         ObjectMapper mapper = new ObjectMapper();
-        return mapper.writeValueAsString(viewMessages);
+        return mapper.writeValueAsString(responseList);
     }
 
     // Handles CREATE intent: parses event details, creates the event, adds context, and returns a confirmation.
