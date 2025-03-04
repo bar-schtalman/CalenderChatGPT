@@ -19,39 +19,29 @@ public class EventController {
     private EventService eventService;
 
     @PostMapping
-    public ResponseEntity<String> createEvent(
-            @PathVariable String calendarId,
-            @RequestBody Event eventRequest) {
+    public ResponseEntity<String> createEvent(@PathVariable String calendarId, @RequestBody Event eventRequest) {
         try {
             String eventLink = eventService.createEvent(calendarId, eventRequest);
             return ResponseEntity.ok("Event created successfully: " + eventLink);
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Unexpected error occurred while creating the event.");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Unexpected error occurred while creating the event.");
         }
     }
 
     @PutMapping("/{eventId}")
-    public ResponseEntity<String> updateEvent(
-            @PathVariable String calendarId,
-            @PathVariable String eventId,
-            @RequestBody Event eventRequest) {
+    public ResponseEntity<String> updateEvent(@PathVariable String calendarId, @PathVariable String eventId, @RequestBody Event eventRequest) {
         try {
             String eventLink = eventService.updateEvent(calendarId, eventId, eventRequest);
             return ResponseEntity.ok("Event updated successfully: " + eventLink);
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Unexpected error occurred while updating the event.");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Unexpected error occurred while updating the event.");
         }
     }
 
     @GetMapping
-    public ResponseEntity<List<Map<String, String>>> getEventsInDateRange(
-            @PathVariable String calendarId,
-            @RequestParam @ApiParam(value = "Start date-time in RFC3339 format", example = "2025-02-01T00:00:00Z") String startDate,
-            @RequestParam @ApiParam(value = "End date-time in RFC3339 format", example = "2025-02-28T23:59:59Z") String endDate) {
+    public ResponseEntity<List<Map<String, String>>> getEventsInDateRange(@PathVariable String calendarId, @RequestParam @ApiParam(value = "Start date-time in RFC3339 format", example = "2025-02-01T00:00:00Z") String startDate, @RequestParam @ApiParam(value = "End date-time in RFC3339 format", example = "2025-02-28T23:59:59Z") String endDate) {
         try {
             List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, startDate, endDate);
             return ResponseEntity.ok(events);
@@ -62,16 +52,13 @@ public class EventController {
     }
 
     @DeleteMapping("/{eventId}")
-    public ResponseEntity<String> deleteEvent(
-            @PathVariable String calendarId,
-            @PathVariable String eventId) {
+    public ResponseEntity<String> deleteEvent(@PathVariable String calendarId, @PathVariable String eventId) {
         try {
             eventService.deleteEvent(calendarId, eventId);
             return ResponseEntity.ok("Event with ID " + eventId + " deleted successfully.");
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Unexpected error occurred while deleting the event.");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Unexpected error occurred while deleting the event.");
         }
     }
 }

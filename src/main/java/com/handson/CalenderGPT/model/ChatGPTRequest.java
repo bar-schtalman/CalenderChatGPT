@@ -8,7 +8,8 @@ public class ChatGPTRequest {
     private List<Message> messages;
 
     // No-args constructor
-    public ChatGPTRequest() {}
+    public ChatGPTRequest() {
+    }
 
     // All-args constructor
     public ChatGPTRequest(String model, List<Message> messages) {

@@ -126,12 +126,9 @@ public class OpenAIAPIController {
         String eventStartTime = event.getStart().format(OUTPUT_TIME_FORMATTER);
         String eventEndTime = event.getEnd().format(OUTPUT_TIME_FORMATTER);
 
-        String confirmationMessage = event.getSummary() + " Event created successfully: at "
-                + eventDate + ", " + eventStartTime + " - " + eventEndTime;
+        String confirmationMessage = event.getSummary() + " Event created successfully: at " + eventDate + ", " + eventStartTime + " - " + eventEndTime;
         // Add a system message to the conversation history with event details.
-        conversationHistory.add(new Message("system", "Event created: "
-                + event.getSummary() + " at " + event.getLocation()
-                + " on " + eventDate + " starting at " + eventStartTime + "."));
+        conversationHistory.add(new Message("system", "Event created: " + event.getSummary() + " at " + event.getLocation() + " on " + eventDate + " starting at " + eventStartTime + "."));
 
         // Return only the confirmation message, without the Google API response.
         return confirmationMessage;
@@ -178,8 +175,7 @@ public class OpenAIAPIController {
     private String chatWithGPT(String prompt) {
         conversationHistory.add(new Message("user", prompt));
         List<Message> messages = new ArrayList<>(conversationHistory);
-        String assistantReply = chatGPTService.callChatGPT(messages)
-                .getChoices().get(0).getMessage().getContent();
+        String assistantReply = chatGPTService.callChatGPT(messages).getChoices().get(0).getMessage().getContent();
 
         // Ensures response is returned as a single message (no line breaks)
         assistantReply = assistantReply.replaceAll("\\n+", " ");

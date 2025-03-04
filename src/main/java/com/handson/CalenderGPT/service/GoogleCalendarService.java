@@ -61,17 +61,12 @@ public class GoogleCalendarService {
      * Create a new calendar.
      */
     public String createCalendar(String summary) throws IOException {
-        com.google.api.services.calendar.model.Calendar calendar = new com.google.api.services.calendar.model.Calendar()
-                .setSummary(summary)
-                .setTimeZone("UTC");
+        com.google.api.services.calendar.model.Calendar calendar = new com.google.api.services.calendar.model.Calendar().setSummary(summary).setTimeZone("UTC");
 
-        com.google.api.services.calendar.model.Calendar createdCalendar = googleCalendarClient.calendars()
-                .insert(calendar)
-                .execute();
+        com.google.api.services.calendar.model.Calendar createdCalendar = googleCalendarClient.calendars().insert(calendar).execute();
 
         return createdCalendar.getId();
     }
-
 
 
     public Map<String, String> getDefaultCalendarDetails() throws IOException {
@@ -86,7 +81,6 @@ public class GoogleCalendarService {
         }
         throw new IOException("Default calendar not found.");
     }
-
 
 
 }

@@ -37,27 +37,18 @@ public class EventService {
         DateTime startDateTime = convertToGoogleDateTime(eventRequest.getStart(), "UTC");
         DateTime endDateTime = convertToGoogleDateTime(eventRequest.getEnd(), "UTC");
 
-        com.google.api.services.calendar.model.Event googleEvent = new com.google.api.services.calendar.model.Event()
-                .setSummary(eventRequest.getSummary())
-                .setLocation(eventRequest.getLocation())
-                .setDescription(eventRequest.getDescription());
+        com.google.api.services.calendar.model.Event googleEvent = new com.google.api.services.calendar.model.Event().setSummary(eventRequest.getSummary()).setLocation(eventRequest.getLocation()).setDescription(eventRequest.getDescription());
 
         googleEvent.setStart(new EventDateTime().setDateTime(startDateTime).setTimeZone("UTC"));
         googleEvent.setEnd(new EventDateTime().setDateTime(endDateTime).setTimeZone("UTC"));
 
-        com.google.api.services.calendar.model.Event createdEvent = getGoogleCalendarClient()
-                .events()
-                .insert(calendarId, googleEvent)
-                .execute();
+        com.google.api.services.calendar.model.Event createdEvent = getGoogleCalendarClient().events().insert(calendarId, googleEvent).execute();
 
         return createdEvent.getHtmlLink();
     }
 
     public String updateEvent(String calendarId, String eventId, Event eventRequest) throws Exception {
-        com.google.api.services.calendar.model.Event existingEvent = getGoogleCalendarClient()
-                .events()
-                .get(calendarId, eventId)
-                .execute();
+        com.google.api.services.calendar.model.Event existingEvent = getGoogleCalendarClient().events().get(calendarId, eventId).execute();
 
         existingEvent.setSummary(eventRequest.getSummary());
         existingEvent.setLocation(eventRequest.getLocation());
@@ -66,10 +57,7 @@ public class EventService {
         existingEvent.setStart(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getStart(), "UTC")).setTimeZone("UTC"));
         existingEvent.setEnd(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getEnd(), "UTC")).setTimeZone("UTC"));
 
-        com.google.api.services.calendar.model.Event updatedEvent = getGoogleCalendarClient()
-                .events()
-                .update(calendarId, eventId, existingEvent)
-                .execute();
+        com.google.api.services.calendar.model.Event updatedEvent = getGoogleCalendarClient().events().update(calendarId, eventId, existingEvent).execute();
 
         return updatedEvent.getHtmlLink();
     }
@@ -78,14 +66,7 @@ public class EventService {
         DateTime timeMin = new DateTime(startDate);
         DateTime timeMax = new DateTime(endDate);
 
-        Events events = getGoogleCalendarClient()
-                .events()
-                .list(calendarId)
-                .setTimeMin(timeMin)
-                .setTimeMax(timeMax)
-                .setOrderBy("startTime")
-                .setSingleEvents(true)
-                .execute();
+        Events events = getGoogleCalendarClient().events().list(calendarId).setTimeMin(timeMin).setTimeMax(timeMax).setOrderBy("startTime").setSingleEvents(true).execute();
 
         List<Map<String, String>> simplifiedEvents = new ArrayList<>();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
@@ -94,10 +75,8 @@ public class EventService {
             Map<String, String> eventDetails = new HashMap<>();
             eventDetails.put("id", event.getId());
             eventDetails.put("summary", event.getSummary());
-            eventDetails.put("start", event.getStart() != null && event.getStart().getDateTime() != null
-                    ? convertToLocalDateTime(event.getStart().getDateTime()).format(formatter) : "");
-            eventDetails.put("end", event.getEnd() != null && event.getEnd().getDateTime() != null
-                    ? convertToLocalDateTime(event.getEnd().getDateTime()).format(formatter) : "");
+            eventDetails.put("start", event.getStart() != null && event.getStart().getDateTime() != null ? convertToLocalDateTime(event.getStart().getDateTime()).format(formatter) : "");
+            eventDetails.put("end", event.getEnd() != null && event.getEnd().getDateTime() != null ? convertToLocalDateTime(event.getEnd().getDateTime()).format(formatter) : "");
             eventDetails.put("location", Optional.ofNullable(event.getLocation()).orElse(""));
             eventDetails.put("description", Optional.ofNullable(event.getDescription()).orElse(""));
             simplifiedEvents.add(eventDetails);
