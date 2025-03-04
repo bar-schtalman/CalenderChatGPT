@@ -84,39 +84,57 @@
       color: #777;
     }
 
+    /* Deleted event */
+    .event-deleted {
+      font-weight: bold;
+      font-size: 18px;
+      color: red;
+      text-align: center;
+    }
+
+    /* Button container */
+    .button-container {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      gap: 5px;
+    }
+
     /* Delete button */
-.delete-event {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: #ff4d4d; /* Softer red */
-  color: white;
-  border: none;
-  width: 30px;
-  height: 30px;
-  cursor: pointer;
-  border-radius: 50%; /* Ensures circular shape */
-  font-size: 18px;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.3s ease-in-out, transform 0.2s ease;
-}
+    .delete-event, .edit-event {
+      border: none;
+      width: 30px;
+      height: 30px;
+      cursor: pointer;
+      border-radius: 50%;
+      font-size: 18px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s ease;
+    }
 
-/* Hover effect */
-.delete-event:hover {
-  background: #cc0000; /* Darker red on hover */
-  transform: scale(1.1); /* Slight zoom effect */
-}
+    .delete-event {
+      background: #ff4d4d;
+      color: white;
+    }
 
+    .delete-event:hover {
+      background: #cc0000;
+      transform: scale(1.1);
+    }
 
+    .edit-event {
+      background: #007bff;
+      color: white;
+    }
 
-
-
-
-
-
+    .edit-event:hover {
+      background: #0056b3;
+      transform: scale(1.1);
+    }
     </style>
 </head>
 <body>
@@ -137,102 +155,86 @@
 
 <!-- JS Dependencies -->
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+
 <script>
-    // Chat functionality
-    $("#chatForm").on("submit", function(e) {
+    let currentEditingEvent = null;
+
+    $("#chatForm").on("submit", function (e) {
         e.preventDefault();
         var message = $("#chatInput").val().trim();
         if (message === "") return;
 
-        appendMessage("user", message); // Show user message
+        appendMessage("user", message);
         $("#chatInput").val("");
 
-        // Send request to backend
         $.ajax({
             url: "/chat",
             method: "GET",
-            data: { prompt: message },
-            success: function(response) {
+            data: {prompt: message},
+            success: function (response) {
                 try {
                     var parsed = JSON.parse(response);
                     var isViewIntent = parsed.some(msg => msg.role === "event");
 
                     if (isViewIntent) {
-                        parsed.forEach(function(msg) {
+                        parsed.forEach(function (msg) {
                             if (msg.role === "event") {
                                 appendEvent(msg);
                             }
                         });
                     } else {
-                        parsed.forEach(function(msg) {
+                        parsed.forEach(function (msg) {
                             appendMessage(msg.role, msg.content);
                         });
                     }
                 } catch (e) {
-                    var lines = response.split("\n");
-                    lines.forEach(function(line) {
-                        if (line.trim() !== "") {
-                            appendMessage("ai", line);
-                        }
-                    });
+                    appendMessage("ai", response);
                 }
             },
-            error: function() {
+            error: function () {
                 appendMessage("ai", "Sorry, there was an error processing your request.");
             }
         });
     });
 
-    // Append normal messages
     function appendMessage(sender, text) {
         var msgDiv = $("<div></div>").addClass("message " + sender).text(text);
         $("#chatWindow").append(msgDiv).append("<div class='clear'></div>");
         $("#chatWindow").scrollTop($("#chatWindow")[0].scrollHeight);
     }
 
-function appendEvent(event) {
-    var eventCard = $("<div></div>").addClass("event-card");
-    eventCard.append("<div class='event-summary'>" + event.summary + "</div>");
-    eventCard.append("<div class='event-date'>📅 " + event.date + " ⏰ " + event.time + "</div>");
-    if (event.location && event.location !== "No location") {
-        eventCard.append("<div>📍 " + event.location + "</div>");
-    }
+    function appendEvent(event) {
+        var eventCard = $("<div></div>").addClass("event-card");
+        var eventSummary = $("<div></div>").addClass("event-summary").text(event.summary);
+        var eventDate = $("<div></div>").addClass("event-date").text("📅 " + event.date + " ⏰ " + (event.time || "N/A"));
 
-    var deleteBtn = $("<button></button>")
-        .addClass("delete-event")
-        .text("X")
-        .on("click", function() {
-            deleteEvent(event.calendarId, event.id, $(this).parent()); // ✅ Pass correct `calendarId`
+        var deleteBtn = $("<button></button>").addClass("delete-event").text("❌").on("click", function () {
+            deleteEvent(event.calendarId, event.id, eventCard);
         });
 
-    eventCard.append(deleteBtn);
-    $("#chatWindow").append(eventCard);
-    $("#chatWindow").scrollTop($("#chatWindow")[0].scrollHeight);
-}
+        var editBtn = $("<button></button>").addClass("edit-event").text("✏️");
 
+        var buttonContainer = $("<div></div>").addClass("button-container");
+        buttonContainer.append(editBtn).append(deleteBtn);
+        eventCard.append(eventSummary).append(eventDate).append(buttonContainer);
+        $("#chatWindow").append(eventCard);
+        $("#chatWindow").scrollTop($("#chatWindow")[0].scrollHeight);
+    }
 
-// Delete event from backend
-function deleteEvent(calendarId, eventId, eventElement) {
-    $.ajax({
-        url: `/api/google-calendar/calendars/${calendarId}/events/${eventId}`, // ✅ Correct URL format
-        method: "DELETE",
-        success: function(response) {
-            eventElement.remove(); // ✅ Remove event card from UI
-            alert("Event deleted successfully!");
-        },
-        error: function(xhr) {
-            alert("Error deleting event: " + xhr.responseText);
-        }
-    });
-}
-
-
-
-
-
-
-
-
+    function deleteEvent(calendarId, eventId, eventElement) {
+        $.ajax({
+            url: `/api/google-calendar/calendars/${calendarId}/events/${eventId}`,
+            method: "DELETE",
+            success: function (response) {
+                eventElement.html("<div class='event-deleted'>DELETED</div>");
+                console.log("Event deleted from calendar:", response);
+            },
+            error: function (xhr) {
+                alert("Error deleting event: " + xhr.responseText);
+            }
+        });
+    }
 </script>
+
 </body>
 </html>
