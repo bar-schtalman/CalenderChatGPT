@@ -4,14 +4,10 @@
     <meta charset="UTF-8">
     <title>Chat with AI</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-
     <style>
-    /* General body styling */
     body {
       background-color: #f7f7f7;
     }
-
-    /* Chat container */
     .chat-container {
       max-width: 800px;
       margin: 50px auto;
@@ -19,9 +15,8 @@
       border-radius: 10px;
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
       padding: 20px;
+      position: relative;
     }
-
-    /* Chat window */
     .chat-window {
       height: 400px;
       overflow-y: auto;
@@ -30,8 +25,6 @@
       margin-bottom: 20px;
       background: #fafafa;
     }
-
-    /* Chat messages */
     .message {
       margin-bottom: 10px;
       padding: 8px 12px;
@@ -39,25 +32,17 @@
       max-width: 70%;
       display: inline-block;
     }
-
-    /* User messages */
     .message.user {
       background-color: #dcf8c6;
       float: right;
     }
-
-    /* AI messages */
     .message.ai, .message.assistant {
       background-color: #eee;
       float: left;
     }
-
-    /* Clears float */
     .clear {
       clear: both;
     }
-
-    /* Event card */
     .event-card {
       background-color: #ffffff;
       border-radius: 10px;
@@ -70,29 +55,21 @@
       display: flex;
       flex-direction: column;
     }
-
-    /* Event summary */
     .event-summary {
       font-weight: bold;
       font-size: 16px;
       margin-bottom: 5px;
     }
-
-    /* Event date and time */
     .event-date {
       font-size: 14px;
       color: #777;
     }
-
-    /* Deleted event */
     .event-deleted {
       font-weight: bold;
       font-size: 18px;
       color: red;
       text-align: center;
     }
-
-    /* Button container */
     .button-container {
       position: absolute;
       top: 10px;
@@ -100,8 +77,6 @@
       display: flex;
       gap: 5px;
     }
-
-    /* Delete button */
     .delete-event, .edit-event {
       border: none;
       width: 30px;
@@ -115,31 +90,41 @@
       justify-content: center;
       transition: transform 0.2s ease;
     }
-
     .delete-event {
       background: #ff4d4d;
       color: white;
     }
-
     .delete-event:hover {
       background: #cc0000;
       transform: scale(1.1);
     }
-
     .edit-event {
       background: #007bff;
       color: white;
     }
-
     .edit-event:hover {
       background: #0056b3;
       transform: scale(1.1);
     }
-    </style>
+    #authorizeButton {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 8px 12px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      z-index: 10;
+    }
+    #authorizeButton:hover {
+      background-color: #0056b3;
+    }
+  </style>
 </head>
 <body>
 
-<!-- Chat Page (No Login, Loads Immediately) -->
 <div id="chatPage" class="chat-container">
     <h2 class="text-center">Chat with AI</h2>
     <div id="chatWindow" class="chat-window"></div>
@@ -151,89 +136,216 @@
             </div>
         </div>
     </form>
+    <button id="authorizeButton">Authorize with Google</button>
 </div>
 
-<!-- JS Dependencies -->
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" role="dialog" aria-labelledby="editModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editModalLabel">Edit Event</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="editEventForm">
+                    <div class="form-group">
+                        <label for="eventSummary">Summary</label>
+                        <input type="text" class="form-control" id="eventSummary" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group col">
+                            <label for="startDate">Start Date</label>
+                            <input type="date" class="form-control" id="startDate" required>
+                        </div>
+                        <div class="form-group col">
+                            <label for="endDate">End Date</label>
+                            <input type="date" class="form-control" id="endDate">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="startTime">Start Time</label>
+                        <input type="time" class="form-control" id="startTime">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="endTime">End Time</label>
+                        <input type="time" class="form-control" id="endTime">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button class="btn btn-primary" id="saveEdit">Save changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 
 <script>
+  $(document).ready(function () {
     let currentEditingEvent = null;
 
     $("#chatForm").on("submit", function (e) {
-        e.preventDefault();
-        var message = $("#chatInput").val().trim();
-        if (message === "") return;
+      e.preventDefault();
+      const message = $("#chatInput").val().trim();
+      if (message === "") return;
 
-        appendMessage("user", message);
-        $("#chatInput").val("");
+      appendMessage("user", message);
+      $("#chatInput").val("");
 
-        $.ajax({
-            url: "/chat",
-            method: "GET",
-            data: {prompt: message},
-            success: function (response) {
-                try {
-                    var parsed = JSON.parse(response);
-                    var isViewIntent = parsed.some(msg => msg.role === "event");
+      $.ajax({
+        url: "/chat",
+        method: "GET",
+        data: { prompt: message },
+        success: function (response) {
+          try {
+            const parsed = JSON.parse(response);
+            const isViewIntent = parsed.some(msg => msg.role === "event");
 
-                    if (isViewIntent) {
-                        parsed.forEach(function (msg) {
-                            if (msg.role === "event") {
-                                appendEvent(msg);
-                            }
-                        });
-                    } else {
-                        parsed.forEach(function (msg) {
-                            appendMessage(msg.role, msg.content);
-                        });
-                    }
-                } catch (e) {
-                    appendMessage("ai", response);
-                }
-            },
-            error: function () {
-                appendMessage("ai", "Sorry, there was an error processing your request.");
+            if (isViewIntent) {
+              parsed.forEach(msg => {
+                if (msg.role === "event") appendEvent(msg);
+              });
+            } else {
+              parsed.forEach(msg => appendMessage(msg.role, msg.content));
             }
-        });
+          } catch (e) {
+            appendMessage("ai", response);
+          }
+        },
+        error: function () {
+          appendMessage("ai", "Sorry, there was an error processing your request.");
+        }
+      });
     });
 
     function appendMessage(sender, text) {
-        var msgDiv = $("<div></div>").addClass("message " + sender).text(text);
-        $("#chatWindow").append(msgDiv).append("<div class='clear'></div>");
-        $("#chatWindow").scrollTop($("#chatWindow")[0].scrollHeight);
+      const msgDiv = $("<div></div>").addClass("message " + sender).text(text);
+      $("#chatWindow").append(msgDiv).append("<div class='clear'></div>");
+      $("#chatWindow").scrollTop($("#chatWindow")[0].scrollHeight);
     }
 
     function appendEvent(event) {
-        var eventCard = $("<div></div>").addClass("event-card");
-        var eventSummary = $("<div></div>").addClass("event-summary").text(event.summary);
-        var eventDate = $("<div></div>").addClass("event-date").text("📅 " + event.date + " ⏰ " + (event.time || "N/A"));
+      const eventCard = $("<div></div>").addClass("event-card");
+      const eventSummary = $("<div></div>").addClass("event-summary").text(event.summary);
+      const eventDate = $("<div></div>").addClass("event-date").text("📅 " + event.date + " ⏰ " + (event.time || "N/A"));
 
-        var deleteBtn = $("<button></button>").addClass("delete-event").text("❌").on("click", function () {
-            deleteEvent(event.calendarId, event.id, eventCard);
-        });
+      const deleteBtn = $("<button></button>").addClass("delete-event").text("❌").on("click", function () {
+        deleteEvent(event.calendarId, event.id, eventCard);
+      });
 
-        var editBtn = $("<button></button>").addClass("edit-event").text("✏️");
+      const editBtn = $("<button></button>").addClass("edit-event").text("✏️").on("click", function () {
+        currentEditingEvent = event;
 
-        var buttonContainer = $("<div></div>").addClass("button-container");
-        buttonContainer.append(editBtn).append(deleteBtn);
-        eventCard.append(eventSummary).append(eventDate).append(buttonContainer);
-        $("#chatWindow").append(eventCard);
-        $("#chatWindow").scrollTop($("#chatWindow")[0].scrollHeight);
+        const startDate = event.date;
+        const endDate = event.endDate || event.date;
+        const [startTimeRaw, endTimeRaw] = (event.time || "").split("-").map(t => t.trim());
+
+        $("#eventSummary").val(event.summary);
+        $("#startDate").val(formatDateForInput(startDate));
+        $("#startTime").val(formatTimeForInput(startTimeRaw));
+        $("#endDate").val(formatDateForInput(endDate));
+        $("#endTime").val(formatTimeForInput(endTimeRaw));
+
+        $("#editModal").modal("show");
+      });
+
+      const buttonContainer = $("<div></div>").addClass("button-container").append(editBtn).append(deleteBtn);
+      eventCard.append(eventSummary).append(eventDate).append(buttonContainer);
+      $("#chatWindow").append(eventCard);
+      $("#chatWindow").scrollTop($("#chatWindow")[0].scrollHeight);
     }
 
     function deleteEvent(calendarId, eventId, eventElement) {
-        $.ajax({
-            url: `/api/google-calendar/calendars/${calendarId}/events/${eventId}`,
-            method: "DELETE",
-            success: function (response) {
-                eventElement.html("<div class='event-deleted'>DELETED</div>");
-                console.log("Event deleted from calendar:", response);
-            },
-            error: function (xhr) {
-                alert("Error deleting event: " + xhr.responseText);
-            }
-        });
+      $.ajax({
+        url: `/api/google-calendar/calendars/${calendarId}/events/${eventId}`,
+        method: "DELETE",
+        success: function () {
+          eventElement.html("<div class='event-deleted'>DELETED</div>");
+        },
+        error: function (xhr) {
+          alert("Error deleting event: " + xhr.responseText);
+        }
+      });
     }
+
+    $("#saveEdit").click(function () {
+      const summary = $("#eventSummary").val().trim();
+      const startDate = $("#startDate").val().trim();
+      const startTime = $("#startTime").val().trim();
+      const endDate = $("#endDate").val().trim();
+      const endTime = $("#endTime").val().trim();
+
+      if (!summary || !startDate) {
+        alert("Please fill in the required fields.");
+        return;
+      }
+
+      $.ajax({
+        url: `/api/google-calendar/calendars/${currentEditingEvent.calendarId}/events/${currentEditingEvent.id}`,
+        method: "PUT",
+        data: {
+          summary: summary,
+          date: startDate,
+          time: startTime,
+          endDate: endDate,
+          endTime: endTime
+        },
+        success: function () {
+          alert("Event updated successfully!");
+          $("#editModal").modal("hide");
+        },
+        error: function (xhr) {
+          alert("Error updating event: " + xhr.responseText);
+        }
+      });
+    });
+
+    $('#authorizeButton').click(function () {
+      window.location.href = '/authorize-google';
+    });
+
+    function formatDateForInput(dateStr) {
+      const parsedDate = new Date(dateStr);
+      if (!isNaN(parsedDate)) {
+        const year = parsedDate.getFullYear();
+        const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+        const day = String(parsedDate.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+      return '';
+    }
+
+    function formatTimeForInput(timeStr) {
+      if (!timeStr) return '';
+      const ampmMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+      if (ampmMatch) {
+        let hour = parseInt(ampmMatch[1]);
+        const minute = ampmMatch[2];
+        const period = ampmMatch[3].toUpperCase();
+        if (period === "PM" && hour !== 12) hour += 12;
+        if (period === "AM" && hour === 12) hour = 0;
+        return `${String(hour).padStart(2, '0')}:${minute}`;
+      }
+
+      const twentyFourMatch = timeStr.match(/^(\d{2}):(\d{2})$/);
+      if (twentyFourMatch) return timeStr;
+
+      const temp = new Date(`1970-01-01T${timeStr}`);
+      if (!isNaN(temp)) return temp.toTimeString().slice(0, 5);
+
+      console.warn("Unable to parse time:", timeStr);
+      return '';
+    }
+  });
 </script>
 
 </body>
