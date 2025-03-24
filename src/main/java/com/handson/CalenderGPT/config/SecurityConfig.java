@@ -13,7 +13,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .csrf().disable()
                 .authorizeRequests()
                 .antMatchers(
-                        "/",
+                        "/",                         // root
                         "/swagger-ui.html",
                         "/swagger-ui/**",
                         "/v2/api-docs",
@@ -23,10 +23,14 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                         "/auth/google",
                         "/auth/status",
                         "/api/google-calendar/**",
-                        "/chat",              // Add ChatGPT endpoint here
-                        "/logout"
-                ).permitAll()
+                        "/chat",                    // AI chat endpoint
+                        "/logout",
 
+                        // ✅ allow static resources
+                        "/styles.css",
+                        "/script.js",
+                        "/static/**"                // allow everything under static folder
+                ).permitAll()
                 .anyRequest().authenticated()
                 .and()
                 .oauth2Login()
@@ -40,5 +44,6 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .deleteCookies("JSESSIONID")
                 .permitAll();
     }
+
 
 }

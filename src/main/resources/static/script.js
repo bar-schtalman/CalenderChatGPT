@@ -1,6 +1,7 @@
 $(document).ready(function () {
   let currentEditingEvent = null;
 
+  // Handle chat form submit
   $("#chatForm").on("submit", function (e) {
     e.preventDefault();
     const message = $("#chatInput").val().trim();
@@ -46,25 +47,31 @@ $(document).ready(function () {
     const eventSummary = $("<div></div>").addClass("event-summary").text(event.summary);
     const eventDate = $("<div></div>").addClass("event-date").text("📅 " + event.date + " ⏰ " + (event.time || "N/A"));
 
-    const deleteBtn = $("<button></button>").addClass("delete-event").text("❌").on("click", function () {
-      deleteEvent(event.calendarId, event.id, eventCard);
-    });
+    const deleteBtn = $("<button></button>")
+      .addClass("delete-event")
+      .text("❌")
+      .on("click", function () {
+        deleteEvent(event.calendarId, event.id, eventCard);
+      });
 
-    const editBtn = $("<button></button>").addClass("edit-event").text("✏️").on("click", function () {
-      currentEditingEvent = event;
+    const editBtn = $("<button></button>")
+      .addClass("edit-event")
+      .text("✏️")
+      .on("click", function () {
+        currentEditingEvent = event;
 
-      const startDate = event.date;
-      const endDate = event.endDate || event.date;
-      const [startTimeRaw, endTimeRaw] = (event.time || "").split("-").map(t => t.trim());
+        const startDate = event.date;
+        const endDate = event.endDate || event.date;
+        const [startTimeRaw, endTimeRaw] = (event.time || "").split("-").map(t => t.trim());
 
-      $("#eventSummary").val(event.summary);
-      $("#startDate").val(formatDateForInput(startDate));
-      $("#startTime").val(formatTimeForInput(startTimeRaw));
-      $("#endDate").val(formatDateForInput(endDate));
-      $("#endTime").val(formatTimeForInput(endTimeRaw));
+        $("#eventSummary").val(event.summary);
+        $("#startDate").val(formatDateForInput(startDate));
+        $("#startTime").val(formatTimeForInput(startTimeRaw));
+        $("#endDate").val(formatDateForInput(endDate));
+        $("#endTime").val(formatTimeForInput(endTimeRaw));
 
-      $("#editModal").modal("show");
-    });
+        $("#editModal").modal("show");
+      });
 
     const buttonContainer = $("<div></div>").addClass("button-container").append(editBtn).append(deleteBtn);
     eventCard.append(eventSummary).append(eventDate).append(buttonContainer);
@@ -117,7 +124,7 @@ $(document).ready(function () {
     });
   });
 
-  $('#authorizeButton').click(function () {
+  $("#authorizeButton").click(function () {
     window.location.href = '/authorize-google';
   });
 
