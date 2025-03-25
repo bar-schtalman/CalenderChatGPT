@@ -27,8 +27,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                         "/logout",
 
                         // ✅ allow static resources
-                        "/styles.css",
-                        "/script.js",
+                        "/styles.css","/apiClient.js","/chatHandler.js","/eventEditor.js", "/eventRenderer.js","/utils.js",
                         "/static/**"                // allow everything under static folder
                 ).permitAll()
                 .anyRequest().authenticated()
