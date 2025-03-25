@@ -95,6 +95,11 @@ body {
   justify-content: center;
   transition: transform 0.2s ease;
 }
+.form-row {
+  display: flex;
+  gap: 15px;
+}
+
 
 .delete-event {
   background: #ff4d4d;

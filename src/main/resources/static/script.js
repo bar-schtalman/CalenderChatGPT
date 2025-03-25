@@ -1,7 +1,6 @@
 $(document).ready(function () {
   let currentEditingEvent = null;
 
-  // Handle chat form submit
   $("#chatForm").on("submit", function (e) {
     e.preventDefault();
     const message = $("#chatInput").val().trim();
@@ -19,13 +18,16 @@ $(document).ready(function () {
           const parsed = JSON.parse(response);
           const isViewIntent = parsed.some(msg => msg.role === "event");
 
-          if (isViewIntent) {
-            parsed.forEach(msg => {
-              if (msg.role === "event") appendEvent(msg);
-            });
-          } else {
-            parsed.forEach(msg => appendMessage(msg.role, msg.content));
-          }
+          parsed.forEach(msg => {
+            if (msg.role === "event") {
+              if (msg.created === true) {
+                appendMessage("ai", `✅ Event '${msg.summary}' created for ${msg.date} at ${msg.time}`);
+              }
+              appendEvent(msg); // Render for both view & created
+            } else {
+              appendMessage(msg.role, msg.content);
+            }
+          });
         } catch (e) {
           appendMessage("ai", response);
         }
@@ -94,26 +96,32 @@ $(document).ready(function () {
 
   $("#saveEdit").click(function () {
     const summary = $("#eventSummary").val().trim();
-    const startDate = $("#startDate").val().trim();
-    const startTime = $("#startTime").val().trim();
-    const endDate = $("#endDate").val().trim();
-    const endTime = $("#endTime").val().trim();
+    const startDate = $("#startDate").val();
+    const startTime = $("#startTime").val();
+    const endDate = $("#endDate").val();
+    const endTime = $("#endTime").val();
 
-    if (!summary || !startDate) {
-      alert("Please fill in the required fields.");
+    if (!summary || !startDate || !startTime || !endDate || !endTime) {
+      alert("Please fill in all fields.");
       return;
     }
+
+    const start = `${startDate}T${startTime}`;
+    const end = `${endDate}T${endTime}`;
+
+    const updatedEvent = {
+      summary: summary,
+      start: start,
+      end: end,
+      description: "",
+      location: ""
+    };
 
     $.ajax({
       url: `/api/google-calendar/calendars/${currentEditingEvent.calendarId}/events/${currentEditingEvent.id}`,
       method: "PUT",
-      data: {
-        summary: summary,
-        date: startDate,
-        time: startTime,
-        endDate: endDate,
-        endTime: endTime
-      },
+      contentType: "application/json",
+      data: JSON.stringify(updatedEvent),
       success: function () {
         alert("Event updated successfully!");
         $("#editModal").modal("hide");
@@ -129,13 +137,17 @@ $(document).ready(function () {
   });
 
   function formatDateForInput(dateStr) {
-    const parsedDate = new Date(dateStr);
-    if (!isNaN(parsedDate)) {
-      const year = parsedDate.getFullYear();
-      const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
-      const day = String(parsedDate.getDate()).padStart(2, '0');
+    const match = dateStr.match(/^(\d{2})[-.](\d{2})[-.](\d{4})$/);
+    if (match) {
+      const [, day, month, year] = match;
       return `${year}-${month}-${day}`;
     }
+
+    const fallback = new Date(dateStr);
+    if (!isNaN(fallback)) {
+      return fallback.toISOString().split("T")[0];
+    }
+
     return '';
   }
 
