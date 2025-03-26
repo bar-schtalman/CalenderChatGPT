@@ -14,16 +14,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @RestController
 public class OpenAIAPIController {
 
-    // Common DateTimeFormatters
-    private static final DateTimeFormatter INPUT_FORMATTER = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
     private static final DateTimeFormatter OUTPUT_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter OUTPUT_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_DATE_TIME;
@@ -40,20 +35,16 @@ public class OpenAIAPIController {
     @Autowired
     private ChatGPTService chatGPTService;
 
-    // Conversation history still stores all messages (for context with ChatGPT)
     private final List<Message> conversationHistory = new ArrayList<>();
 
     @GetMapping("/chat")
     public String chat(@RequestParam("prompt") String prompt) {
         try {
             String extractedJson = intentService.extractDetailsFromPrompt(prompt);
-            System.out.println("🛠 Extracted JSON from ChatGPT:\n" + extractedJson);
-
             ObjectMapper mapper = new ObjectMapper();
             JsonNode jsonNode = mapper.readTree(extractedJson);
 
             IntentType intent = mapIntentType(jsonNode.get("intent").asText());
-            System.out.println("Extracted Intent from ChatGPT: " + intent);
 
             if (intent == IntentType.VIEW_EVENTS) {
                 return handleViewEvents(jsonNode);
@@ -62,79 +53,85 @@ public class OpenAIAPIController {
                 return handleCreateEvent(jsonNode);
             }
             if (intent != IntentType.NONE) {
-                return "Detected Intent: " + intent.name() + "\n\nExtracted Details:\n" + jsonNode.toPrettyString();
+                Map<String, String> intentMsg = new HashMap<>();
+                intentMsg.put("role", "ai");
+                intentMsg.put("content", "Detected Intent: " + intent.name() + "\n\nExtracted Details:\n" + jsonNode.toPrettyString());
+                return mapper.writeValueAsString(Collections.singletonList(intentMsg));
             }
             return chatWithGPT(prompt);
         } catch (Exception e) {
-            System.out.println("❌ Error processing request: " + e.getMessage());
-            return "❌ Error: " + e.getMessage() + "\n\nCheck server logs for details.";
+            e.printStackTrace();
+            Map<String, String> error = new HashMap<>();
+            error.put("role", "ai");
+            error.put("content", "❌ Error: " + e.getMessage());
+            try {
+                return new ObjectMapper().writeValueAsString(Collections.singletonList(error));
+            } catch (Exception ex) {
+                return "[{\"role\":\"ai\",\"content\":\"Fatal error occurred\"}]";
+            }
         }
     }
 
-    // Maps the extracted intent string to our IntentType enum.
     private IntentType mapIntentType(String extractedIntent) {
         switch (extractedIntent.toUpperCase()) {
-            case "CREATE":
-                return IntentType.CREATE_EVENT;
-            case "EDIT":
-                return IntentType.EDIT_EVENT;
-            case "DELETE":
-                return IntentType.DELETE_EVENT;
-            case "VIEW":
-                return IntentType.VIEW_EVENTS;
-            default:
-                return IntentType.NONE;
+            case "CREATE": return IntentType.CREATE_EVENT;
+            case "EDIT": return IntentType.EDIT_EVENT;
+            case "DELETE": return IntentType.DELETE_EVENT;
+            case "VIEW": return IntentType.VIEW_EVENTS;
+            default: return IntentType.NONE;
         }
     }
 
-    // Handles VIEW intent: builds a response listing events with formatted date, time, summary, and location (if provided).
     private String handleViewEvents(JsonNode jsonNode) throws Exception {
         String start = jsonNode.get("start").asText();
         String end = jsonNode.get("end").asText();
-        String calendarId = calendarContext.getCalendarId(); // ✅ Get Calendar ID
+        String calendarId = calendarContext.getCalendarId();
 
         List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, start, end);
-        if (events.isEmpty()) {
-            return "[{\"role\": \"ai\", \"content\": \"No events found between " + start + " and " + end + ".\"}]";
-        }
-
         List<Map<String, String>> responseList = new ArrayList<>();
-        for (Map<String, String> event : events) {
-            Map<String, String> eventData = new HashMap<>();
-            eventData.put("role", "event");
-            eventData.put("summary", event.get("summary"));
-            eventData.put("date", event.get("start").split(" ")[0]); // Extract date only
-            eventData.put("time", event.get("start").split(" ")[1] + " - " + event.get("end").split(" ")[1]); // Extract time range
-            eventData.put("location", event.getOrDefault("location", "No location"));
-            eventData.put("calendarId", calendarId); // ✅ Include Calendar ID
-            eventData.put("id", event.get("id")); // ✅ Ensure Event ID is included
-            responseList.add(eventData);
+
+        if (events.isEmpty()) {
+            Map<String, String> msg = new HashMap<>();
+            msg.put("role", "ai");
+            msg.put("content", "No events found between " + start + " and " + end + ".");
+            responseList.add(msg);
+        } else {
+            for (Map<String, String> event : events) {
+                Map<String, String> e = new HashMap<>();
+                e.put("role", "event");
+                e.put("summary", event.get("summary"));
+                e.put("date", event.get("start").split(" ")[0]);
+                e.put("time", event.get("start").split(" ")[1] + " - " + event.get("end").split(" ")[1]);
+                e.put("location", event.getOrDefault("location", "No location"));
+                e.put("calendarId", calendarId);
+                e.put("id", event.get("id"));
+                responseList.add(e);
+            }
         }
 
-        ObjectMapper mapper = new ObjectMapper();
-        return mapper.writeValueAsString(responseList);
+        return new ObjectMapper().writeValueAsString(responseList);
     }
 
-    // Handles CREATE intent: parses event details, creates the event, adds context, and returns a confirmation.
     private String handleCreateEvent(JsonNode jsonNode) throws Exception {
         Event event = parseEventDetails(jsonNode);
         String calendarId = calendarContext.getCalendarId();
-        // Create the event and get response from the API (this part is now not returned to the user).
         eventService.createEvent(calendarId, event);
 
         String eventDate = event.getStart().format(OUTPUT_DATE_FORMATTER);
-        String eventStartTime = event.getStart().format(OUTPUT_TIME_FORMATTER);
-        String eventEndTime = event.getEnd().format(OUTPUT_TIME_FORMATTER);
+        String start = event.getStart().format(OUTPUT_TIME_FORMATTER);
+        String end = event.getEnd().format(OUTPUT_TIME_FORMATTER);
 
-        String confirmationMessage = event.getSummary() + " Event created successfully: at " + eventDate + ", " + eventStartTime + " - " + eventEndTime;
-        // Add a system message to the conversation history with event details.
-        conversationHistory.add(new Message("system", "Event created: " + event.getSummary() + " at " + event.getLocation() + " on " + eventDate + " starting at " + eventStartTime + "."));
+        Map<String, String> response = new HashMap<>();
+        response.put("role", "event");
+        response.put("summary", event.getSummary());
+        response.put("date", eventDate);
+        response.put("time", start + " - " + end);
+        response.put("calendarId", calendarId);
+        response.put("id", event.getId());
 
-        // Return only the confirmation message, without the Google API response.
-        return confirmationMessage;
+        return new ObjectMapper().writeValueAsString(Collections.singletonList(response));
     }
 
-    // Parses event details from the JSON and builds an Event object.
     private Event parseEventDetails(JsonNode jsonNode) {
         Event event = new Event();
         try {
@@ -159,7 +156,6 @@ public class OpenAIAPIController {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            // Use fallback values if parsing fails.
             event.setId("N/A");
             event.setSummary("Default Event");
             event.setDescription("No Description");
@@ -170,18 +166,21 @@ public class OpenAIAPIController {
         return event;
     }
 
-    // Delegates non-event prompts to ChatGPT using the shared service.
-// Delegates non-event prompts to ChatGPT using the shared service.
     private String chatWithGPT(String prompt) {
         conversationHistory.add(new Message("user", prompt));
         List<Message> messages = new ArrayList<>(conversationHistory);
         String assistantReply = chatGPTService.callChatGPT(messages).getChoices().get(0).getMessage().getContent();
-
-        // Ensures response is returned as a single message (no line breaks)
         assistantReply = assistantReply.replaceAll("\\n+", " ");
-
         conversationHistory.add(new Message("assistant", assistantReply));
-        return assistantReply;
-    }
 
+        Map<String, String> response = new HashMap<>();
+        response.put("role", "ai");
+        response.put("content", assistantReply);
+
+        try {
+            return new ObjectMapper().writeValueAsString(Collections.singletonList(response));
+        } catch (Exception e) {
+            return "[{\"role\":\"ai\",\"content\":\"Error generating reply\"}]";
+        }
+    }
 }

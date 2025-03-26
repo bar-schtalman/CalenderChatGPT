@@ -18,19 +18,15 @@ import java.util.*;
 @Service
 public class EventService {
 
-    private final GoogleCalendarConfig googleCalendarConfig;
     private Calendar googleCalendarClient;
 
     @Autowired
-    public EventService(GoogleCalendarConfig googleCalendarConfig) {
-        this.googleCalendarConfig = googleCalendarConfig;
+    public EventService(Calendar googleCalendarClient) {
+        this.googleCalendarClient = googleCalendarClient;
     }
 
-    private Calendar getGoogleCalendarClient() throws Exception {
-        if (googleCalendarClient == null) {
-            googleCalendarClient = googleCalendarConfig.googleCalendarClient();
-        }
-        return googleCalendarClient;
+    public void setCalendar(Calendar calendar) {
+        this.googleCalendarClient = calendar;
     }
 
     public String createEvent(String calendarId, Event eventRequest) throws Exception {
@@ -42,13 +38,13 @@ public class EventService {
         googleEvent.setStart(new EventDateTime().setDateTime(startDateTime).setTimeZone("UTC"));
         googleEvent.setEnd(new EventDateTime().setDateTime(endDateTime).setTimeZone("UTC"));
 
-        com.google.api.services.calendar.model.Event createdEvent = getGoogleCalendarClient().events().insert(calendarId, googleEvent).execute();
+        com.google.api.services.calendar.model.Event createdEvent = googleCalendarClient.events().insert(calendarId, googleEvent).execute();
 
         return createdEvent.getHtmlLink();
     }
 
     public String updateEvent(String calendarId, String eventId, Event eventRequest) throws Exception {
-        com.google.api.services.calendar.model.Event existingEvent = getGoogleCalendarClient().events().get(calendarId, eventId).execute();
+        com.google.api.services.calendar.model.Event existingEvent = googleCalendarClient.events().get(calendarId, eventId).execute();
 
         existingEvent.setSummary(eventRequest.getSummary());
         existingEvent.setLocation(eventRequest.getLocation());
@@ -57,7 +53,7 @@ public class EventService {
         existingEvent.setStart(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getStart(), "UTC")).setTimeZone("UTC"));
         existingEvent.setEnd(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getEnd(), "UTC")).setTimeZone("UTC"));
 
-        com.google.api.services.calendar.model.Event updatedEvent = getGoogleCalendarClient().events().update(calendarId, eventId, existingEvent).execute();
+        com.google.api.services.calendar.model.Event updatedEvent = googleCalendarClient.events().update(calendarId, eventId, existingEvent).execute();
 
         return updatedEvent.getHtmlLink();
     }
@@ -66,7 +62,7 @@ public class EventService {
         DateTime timeMin = new DateTime(startDate);
         DateTime timeMax = new DateTime(endDate);
 
-        Events events = getGoogleCalendarClient().events().list(calendarId).setTimeMin(timeMin).setTimeMax(timeMax).setOrderBy("startTime").setSingleEvents(true).execute();
+        Events events = googleCalendarClient.events().list(calendarId).setTimeMin(timeMin).setTimeMax(timeMax).setOrderBy("startTime").setSingleEvents(true).execute();
 
         List<Map<String, String>> simplifiedEvents = new ArrayList<>();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
@@ -86,7 +82,7 @@ public class EventService {
     }
 
     public void deleteEvent(String calendarId, String eventId) throws Exception {
-        getGoogleCalendarClient().events().delete(calendarId, eventId).execute();
+        googleCalendarClient.events().delete(calendarId, eventId).execute();
     }
 
     private DateTime convertToGoogleDateTime(LocalDateTime localDateTime, String timeZoneId) {
@@ -97,6 +93,4 @@ public class EventService {
     private LocalDateTime convertToLocalDateTime(DateTime googleDateTime) {
         return LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(googleDateTime.getValue()), ZoneId.of("UTC"));
     }
-
-
 }

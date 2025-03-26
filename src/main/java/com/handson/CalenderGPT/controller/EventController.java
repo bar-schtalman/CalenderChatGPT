@@ -1,64 +1,94 @@
 package com.handson.CalenderGPT.controller;
 
+import com.google.api.client.util.DateTime;
+import com.google.api.services.calendar.Calendar;
+import com.google.api.services.calendar.model.*;
+import com.handson.CalenderGPT.context.CalendarContext;
 import com.handson.CalenderGPT.model.Event;
-import com.handson.CalenderGPT.service.EventService;
-import io.swagger.annotations.ApiParam;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.Map;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 
 @RestController
-@RequestMapping("/api/google-calendar/calendars/{calendarId}/events")
+@RequestMapping("/api/events")
 public class EventController {
 
-    @Autowired
-    private EventService eventService;
+    private final Calendar googleCalendarClient;
+    private final CalendarContext calendarContext;
 
-    @PostMapping
-    public ResponseEntity<String> createEvent(@PathVariable String calendarId, @RequestBody Event eventRequest) {
-        try {
-            String eventLink = eventService.createEvent(calendarId, eventRequest);
-            return ResponseEntity.ok("Event created successfully: " + eventLink);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Unexpected error occurred while creating the event.");
-        }
+    public EventController(Calendar googleCalendarClient, CalendarContext calendarContext) {
+        this.googleCalendarClient = googleCalendarClient;
+        this.calendarContext = calendarContext;
     }
 
-    @PutMapping("/{eventId}")
-    public ResponseEntity<String> updateEvent(@PathVariable String calendarId, @PathVariable String eventId, @RequestBody Event eventRequest) {
-        try {
-            String eventLink = eventService.updateEvent(calendarId, eventId, eventRequest);
-            return ResponseEntity.ok("Event updated successfully: " + eventLink);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Unexpected error occurred while updating the event.");
-        }
+    @PostMapping("/create")
+    public String createEvent(@RequestBody Event eventRequest) throws Exception {
+        String calendarId = calendarContext.getCalendarId();
+        if (calendarId == null) throw new IllegalStateException("Calendar ID not found");
+
+        com.google.api.services.calendar.model.Event googleEvent = new com.google.api.services.calendar.model.Event()
+                .setSummary(eventRequest.getSummary())
+                .setLocation(eventRequest.getLocation())
+                .setDescription(eventRequest.getDescription());
+
+        googleEvent.setStart(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getStart())).setTimeZone("UTC"));
+        googleEvent.setEnd(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getEnd())).setTimeZone("UTC"));
+
+        return googleCalendarClient.events().insert(calendarId, googleEvent).execute().getHtmlLink();
     }
 
-    @GetMapping
-    public ResponseEntity<List<Map<String, String>>> getEventsInDateRange(@PathVariable String calendarId, @RequestParam @ApiParam(value = "Start date-time in RFC3339 format", example = "2025-02-01T00:00:00Z") String startDate, @RequestParam @ApiParam(value = "End date-time in RFC3339 format", example = "2025-02-28T23:59:59Z") String endDate) {
-        try {
-            List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, startDate, endDate);
-            return ResponseEntity.ok(events);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
-        }
+    @PutMapping("/update/{eventId}")
+    public String updateEvent(@PathVariable String eventId, @RequestBody Event eventRequest) throws Exception {
+        String calendarId = calendarContext.getCalendarId();
+        com.google.api.services.calendar.model.Event existingEvent = googleCalendarClient.events().get(calendarId, eventId).execute();
+
+        existingEvent.setSummary(eventRequest.getSummary());
+        existingEvent.setLocation(eventRequest.getLocation());
+        existingEvent.setDescription(eventRequest.getDescription());
+        existingEvent.setStart(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getStart())).setTimeZone("UTC"));
+        existingEvent.setEnd(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getEnd())).setTimeZone("UTC"));
+
+        return googleCalendarClient.events().update(calendarId, eventId, existingEvent).execute().getHtmlLink();
     }
 
-    @DeleteMapping("/{eventId}")
-    public ResponseEntity<String> deleteEvent(@PathVariable String calendarId, @PathVariable String eventId) {
-        try {
-            eventService.deleteEvent(calendarId, eventId);
-            return ResponseEntity.ok("Event with ID " + eventId + " deleted successfully.");
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Unexpected error occurred while deleting the event.");
+    @GetMapping("/view")
+    public List<Map<String, String>> getEvents(@RequestParam String start, @RequestParam String end) throws Exception {
+        String calendarId = calendarContext.getCalendarId();
+        List<Map<String, String>> simplifiedEvents = new ArrayList<>();
+        Events events = googleCalendarClient.events().list(calendarId)
+                .setTimeMin(new DateTime(start))
+                .setTimeMax(new DateTime(end))
+                .setOrderBy("startTime")
+                .setSingleEvents(true)
+                .execute();
+
+        for (com.google.api.services.calendar.model.Event e : events.getItems()) {
+            Map<String, String> map = new HashMap<>();
+            map.put("id", e.getId());
+            map.put("summary", e.getSummary());
+            map.put("start", formatDate(e.getStart().getDateTime()));
+            map.put("end", formatDate(e.getEnd().getDateTime()));
+            map.put("location", Optional.ofNullable(e.getLocation()).orElse(""));
+            map.put("description", Optional.ofNullable(e.getDescription()).orElse(""));
+            simplifiedEvents.add(map);
         }
+        return simplifiedEvents;
+    }
+
+    @DeleteMapping("/delete/{eventId}")
+    public void deleteEvent(@PathVariable String eventId) throws Exception {
+        String calendarId = calendarContext.getCalendarId();
+        googleCalendarClient.events().delete(calendarId, eventId).execute();
+    }
+
+    private DateTime convertToGoogleDateTime(LocalDateTime ldt) {
+        return new DateTime(ldt.atZone(ZoneId.of("UTC")).toInstant().toEpochMilli());
+    }
+
+    private String formatDate(DateTime dt) {
+        return dt != null ? LocalDateTime.ofInstant(Instant.ofEpochMilli(dt.getValue()), ZoneId.of("UTC"))
+                .format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm")) : "";
     }
 }

@@ -15,8 +15,16 @@ import java.util.Map;
 @Service
 public class GoogleCalendarService {
 
+    private Calendar googleCalendarClient;
+
     @Autowired
-    private Calendar googleCalendarClient; // Inject your Google Calendar client.
+    public GoogleCalendarService(Calendar googleCalendarClient) {
+        this.googleCalendarClient = googleCalendarClient;
+    }
+
+    public void setCalendar(Calendar calendar) {
+        this.googleCalendarClient = calendar;
+    }
 
     /**
      * Fetches the list of all calendars for the authenticated user with details.
@@ -68,7 +76,6 @@ public class GoogleCalendarService {
         return createdCalendar.getId();
     }
 
-
     public Map<String, String> getDefaultCalendarDetails() throws IOException {
         CalendarList calendarList = googleCalendarClient.calendarList().list().execute();
         for (CalendarListEntry entry : calendarList.getItems()) {
@@ -81,6 +88,4 @@ public class GoogleCalendarService {
         }
         throw new IOException("Default calendar not found.");
     }
-
-
 }
