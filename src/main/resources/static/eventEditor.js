@@ -3,18 +3,29 @@ let currentEditingEvent = null;
 function openEditModal(event) {
   currentEditingEvent = event;
 
-  const start = event.start || "";
-  const end = event.end || "";
-  const [startDate, startTime] = start.split(" ");
-  const [endDate, endTime] = end.split(" ");
+  // 🔄 Fetch full event details from backend
+  $.ajax({
+    url: `/api/events/${event.id}`,
+    method: "GET",
+    success: function (data) {
+      const start = data.start || "";
+      const end = data.end || "";
 
-  $("#eventSummary").val(event.summary || "");
-  $("#startDate").val(formatDateForInput(startDate));
-  $("#startTime").val(formatTimeForInput(startTime));
-  $("#endDate").val(formatDateForInput(endDate || startDate));
-  $("#endTime").val(formatTimeForInput(endTime));
+      const [startDate, startTime] = start.split(" ");
+      const [endDate, endTime] = end.split(" ");
 
-  $("#editModal").modal("show");
+      $("#eventSummary").val(data.summary || "");
+      $("#startDate").val(formatDateForInput(startDate));
+      $("#startTime").val(formatTimeForInput(startTime));
+      $("#endDate").val(formatDateForInput(endDate || startDate));
+      $("#endTime").val(formatTimeForInput(endTime));
+
+      $("#editModal").modal("show");
+    },
+    error: function (xhr) {
+      alert("❌ Failed to fetch event: " + xhr.responseText);
+    }
+  });
 }
 
 $("#saveEdit").click(() => {
@@ -43,7 +54,7 @@ $("#saveEdit").click(() => {
     success: () => {
       $("#editModal").modal("hide");
       alert("✅ Event updated!");
-      location.reload(); // Optional: refresh the UI
+      location.reload(); // Or update UI directly if preferred
     },
     error: (xhr) => {
       alert("❌ Update failed: " + xhr.responseText);

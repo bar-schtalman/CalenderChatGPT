@@ -91,4 +91,21 @@ public class EventController {
         return dt != null ? LocalDateTime.ofInstant(Instant.ofEpochMilli(dt.getValue()), ZoneId.of("UTC"))
                 .format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm")) : "";
     }
+
+    @GetMapping("/{eventId}")
+    public Map<String, String> getEventById(@PathVariable String eventId) throws Exception {
+        String calendarId = calendarContext.getCalendarId();
+        com.google.api.services.calendar.model.Event e = googleCalendarClient.events().get(calendarId, eventId).execute();
+
+        Map<String, String> map = new HashMap<>();
+        map.put("id", e.getId());
+        map.put("summary", e.getSummary());
+        map.put("start", formatDate(e.getStart().getDateTime()));
+        map.put("end", formatDate(e.getEnd().getDateTime()));
+        map.put("location", Optional.ofNullable(e.getLocation()).orElse(""));
+        map.put("description", Optional.ofNullable(e.getDescription()).orElse(""));
+
+        return map;
+    }
+
 }

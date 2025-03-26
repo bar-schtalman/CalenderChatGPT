@@ -1,38 +1,18 @@
-// ✅ Message appending logic
 function appendMessage(sender, text) {
   const msgDiv = $("<div></div>").addClass("message " + sender).text(text);
   $("#chatWindow").append(msgDiv).append("<div class='clear'></div>");
   scrollToBottom();
 }
 
-// ✅ Scroll chat window to bottom
-function scrollToBottom() {
-  const chatWindow = $("#chatWindow")[0];
-  if (chatWindow) {
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-  }
-}
-
-// ✅ Event card renderer
 function appendEvent(event) {
   const card = $("<div class='event-card'></div>");
   const summary = $("<div class='event-summary'></div>").text(event.summary);
 
-  // 🗓️ Extract date and time from backend format "dd-MM-yyyy HH:mm"
-  const startParts = (event.start || "").split(" ");
-  const endParts = (event.end || "").split(" ");
-
-  const date = startParts[0] || "?";
-  const startTime = startParts[1] || "N/A";
-  const endTime = endParts[1] || "?";
-
-  // Save for edit modal usage
-  event.date = date;
-  event.time = `${startTime} - ${endTime}`;
-  event.endDate = endParts[0] || date;
+  const date = event.date || "?";
+  const time = event.time || "N/A - ?";
 
   const dateText = $("<span></span>").text(`📅 ${date}`);
-  const timeText = $("<span></span>").text(`🕒 ${startTime} - ${endTime}`);
+  const timeText = $("<span></span>").text(`🕒 ${time}`);
   const dateRow = $("<div class='event-date'></div>").append(dateText, " ", timeText);
 
   const deleteBtn = $("<button class='delete-event'></button>")
