@@ -3,7 +3,6 @@ let currentEditingEvent = null;
 function openEditModal(event) {
   currentEditingEvent = event;
 
-  // 🔄 Fetch full event details from backend
   $.ajax({
     url: `/api/events/${event.id}`,
     method: "GET",
@@ -54,7 +53,25 @@ $("#saveEdit").click(() => {
     success: () => {
       $("#editModal").modal("hide");
       alert("✅ Event updated!");
-      location.reload(); // Or update UI directly if preferred
+
+      // Re-fetch event and update UI
+      $.ajax({
+        url: `/api/events/${currentEditingEvent.id}`,
+        method: "GET",
+        success: (updatedData) => {
+          // Format fields for card display
+          const startDateTime = new Date(updatedData.start);
+          const endDateTime = new Date(updatedData.end);
+
+          updatedData.date = startDateTime.toLocaleDateString("en-GB"); // dd/mm/yyyy
+          updatedData.time = `${startDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+          refreshEventInUI(updatedData);
+        },
+        error: (xhr) => {
+          console.error("❌ Failed to fetch updated event:", xhr.responseText);
+        }
+      });
     },
     error: (xhr) => {
       alert("❌ Update failed: " + xhr.responseText);
