@@ -4,11 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.handson.CalenderGPT.model.Event;
 import com.handson.CalenderGPT.model.IntentType;
-import com.handson.CalenderGPT.model.Message;
 import com.handson.CalenderGPT.service.ChatGPTService;
 import com.handson.CalenderGPT.service.EventService;
 import com.handson.CalenderGPT.service.IntentService;
 import com.handson.CalenderGPT.context.CalendarContext;
+import com.theokanning.openai.completion.chat.ChatCompletionResult;
+import com.theokanning.openai.completion.chat.ChatMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,7 +36,8 @@ public class OpenAIAPIController {
     @Autowired
     private ChatGPTService chatGPTService;
 
-    private final List<Message> conversationHistory = new ArrayList<>();
+    private final List<ChatMessage> conversationHistory = new ArrayList<>();
+
 
     @GetMapping("/chat")
     public String chat(@RequestParam("prompt") String prompt) {
@@ -167,11 +169,11 @@ public class OpenAIAPIController {
     }
 
     private String chatWithGPT(String prompt) {
-        conversationHistory.add(new Message("user", prompt));
-        List<Message> messages = new ArrayList<>(conversationHistory);
-        String assistantReply = chatGPTService.callChatGPT(messages).getChoices().get(0).getMessage().getContent();
-        assistantReply = assistantReply.replaceAll("\\n+", " ");
-        conversationHistory.add(new Message("assistant", assistantReply));
+        conversationHistory.add(new ChatMessage("user", prompt));
+
+        ChatCompletionResult result = chatGPTService.callChatGPT(conversationHistory);
+        String assistantReply = result.getChoices().get(0).getMessage().getContent().replaceAll("\\n+", " ");
+        conversationHistory.add(new ChatMessage("assistant", assistantReply));
 
         Map<String, String> response = new HashMap<>();
         response.put("role", "ai");
@@ -183,4 +185,5 @@ public class OpenAIAPIController {
             return "[{\"role\":\"ai\",\"content\":\"Error generating reply\"}]";
         }
     }
+
 }
