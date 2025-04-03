@@ -1,9 +1,10 @@
 package com.handson.CalenderGPT.model;
 
-import jakarta.persistence.*;
+
 import org.hibernate.annotations.CreationTimestamp;
 
 
+import javax.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -20,7 +21,6 @@ public class User {
 
     private String firstName;
     private String lastName;
-    private String sessionId;
 
     @CreationTimestamp
     private LocalDateTime createdAt;
@@ -28,11 +28,10 @@ public class User {
     // Constructors
     public User() {}
 
-    public User(String email, String firstName, String lastName, String sessionId) {
+    public User(String email, String firstName, String lastName) {
         this.email = email;
         this.firstName = firstName;
         this.lastName = lastName;
-        this.sessionId = sessionId;
     }
 
     // Getters & Setters
@@ -64,13 +63,6 @@ public class User {
         this.lastName = lastName;
     }
 
-    public String getSessionId() {
-        return sessionId;
-    }
-
-    public void setSessionId(String sessionId) {
-        this.sessionId = sessionId;
-    }
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
