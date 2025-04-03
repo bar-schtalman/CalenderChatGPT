@@ -1,12 +1,23 @@
 function sendChatMessage(message, onSuccess, onError) {
+  const userId = sessionStorage.getItem("userId"); // <-- must be set after login
+
+  if (!userId) {
+    console.error("Missing userId in sessionStorage");
+    return;
+  }
+
   $.ajax({
     url: "/chat",
     method: "GET",
-    data: { prompt: message },
+    data: {
+      prompt: message,
+      userId: userId
+    },
     success: onSuccess,
     error: onError
   });
 }
+
 
 function deleteEvent(calendarId, eventId, element, onSuccess, onError) {
   $.ajax({
@@ -27,3 +38,11 @@ function updateEvent(calendarId, eventId, eventData, onSuccess, onError) {
     error: onError
   });
 }
+
+fetch('/api/me')
+  .then(res => res.json())
+  .then(user => {
+    sessionStorage.setItem('userId', user.id);
+  })
+  .catch(() => console.error("🔴 Couldn't fetch user session"));
+
