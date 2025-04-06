@@ -34,7 +34,11 @@ function appendEvent(event) {
     .html("✏️")
     .on("click", () => openEditModal(event));
 
-  const buttons = $("<div class='button-container'></div>").append(editBtn, deleteBtn);
+  const guestBtn = $("<button class='guest-event btn btn-info btn-sm'></button>")
+    .html("➕")
+    .on("click", () => openGuestModal(event));
+
+  const buttons = $("<div class='button-container'></div>").append(editBtn, deleteBtn, guestBtn);
 
   card.append(summary, dateRow, buttons);
   $("#chatWindow").append(card);
@@ -72,7 +76,11 @@ function refreshEventInUI(event) {
     .html("✏️")
     .on("click", () => openEditModal(event));
 
-  const buttons = $("<div class='button-container'></div>").append(editBtn, deleteBtn);
+  const guestBtn = $("<button class='guest-event btn btn-info btn-sm'></button>")
+    .html("➕")
+    .on("click", () => openGuestModal(event));
+
+  const buttons = $("<div class='button-container'></div>").append(editBtn, deleteBtn, guestBtn);
 
   $card.empty().append(summary, dateRow, buttons);
 }
