@@ -1,0 +1,46 @@
+# Maven
+/target/
+
+# Gradle
+/build/
+
+# IntelliJ
+*.iml
+.idea/
+*.ipr
+*.iws
+
+# Eclipse
+.project
+.classpath
+.settings/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Swagger UI (if manually generated)
+/swagger-ui.html
+/swagger/
+/swagger-ui/
+/swagger-resources/
+/v3/api-docs/
+
+# Generated files
+*.jar
+*.war
+*.ear
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment and properties files (if sensitive)
+application-secret.properties
+*.env
