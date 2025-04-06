@@ -104,6 +104,6 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
             }
         }
 
-        response.sendRedirect("/");
+        response.sendRedirect("/chat-ui");
     }
 }

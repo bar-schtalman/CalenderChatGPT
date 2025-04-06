@@ -85,8 +85,6 @@ public class EventService {
         googleCalendarClient.events().delete(calendarId, eventId).execute();
     }
 
-    // --- Utility methods ---
-
     private DateTime convertToGoogleDateTime(LocalDateTime localDateTime) {
         ZonedDateTime zonedDateTime = localDateTime.atZone(ZoneId.of("UTC"));
         return new DateTime(zonedDateTime.toInstant().toEpochMilli());

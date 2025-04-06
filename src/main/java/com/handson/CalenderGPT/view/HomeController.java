@@ -10,4 +10,9 @@ public class HomeController {
     public String home() {
         return "index"; // Resolves to src/main/resources/templates/index.html
     }
+
+    @GetMapping("/chat-ui")
+    public String chatPage() {
+        return "chat"; // Resolves to chat.html
+    }
 }

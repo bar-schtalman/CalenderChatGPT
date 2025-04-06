@@ -107,4 +107,10 @@ public class CalendarController {
         }
     }
 
+    @PostMapping("/select-calendar")
+    public void selectCalendar(@RequestParam String calendarId) {
+        calendarContext.setCalendarId(calendarId);
+        System.out.println("✅ Selected calendar updated to: " + calendarId);
+    }
+
 }
