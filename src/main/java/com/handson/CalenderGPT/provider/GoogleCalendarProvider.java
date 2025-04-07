@@ -1,4 +1,4 @@
-package com.handson.CalenderGPT.config;
+package com.handson.CalenderGPT.provider;
 
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.json.JsonFactory;

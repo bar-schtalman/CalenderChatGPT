@@ -161,6 +161,13 @@
 			<scope>provided</scope>
 		</dependency>
 
+		<dependency>
+			<groupId>com.google.apis</groupId>
+			<artifactId>google-api-services-people</artifactId>
+			<version>v1-rev20240312-2.0.0</version> <!-- ✅ Use the latest available -->
+		</dependency>
+
+
 	</dependencies>
 
 	<build>

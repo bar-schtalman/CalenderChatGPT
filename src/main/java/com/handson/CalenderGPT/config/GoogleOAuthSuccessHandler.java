@@ -6,9 +6,9 @@ import com.google.api.services.calendar.model.CalendarListEntry;
 import com.handson.CalenderGPT.context.CalendarContext;
 import com.handson.CalenderGPT.model.User;
 import com.handson.CalenderGPT.model.UserSession;
+import com.handson.CalenderGPT.provider.GoogleCalendarProvider;
 import com.handson.CalenderGPT.repository.UserRepository;
 import com.handson.CalenderGPT.repository.UserSessionRepository;
-import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
@@ -60,6 +60,9 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
                     oauthToken.getAuthorizedClientRegistrationId(),
                     oauthToken.getName()
             );
+            calendarContext.setAuthorizedClient(client);
+            log.info("✅ Stored OAuth2AuthorizedClient in CalendarContext");
+
 
             Map<String, Object> attributes = oauthToken.getPrincipal().getAttributes();
             String email = (String) attributes.get("email");

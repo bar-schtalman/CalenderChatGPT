@@ -1,3 +1,5 @@
+// guestRenderer.js
+
 let currentEventForGuest = null;
 
 function openGuestModal(event) {
@@ -14,7 +16,7 @@ function openGuestModal(event) {
 $('#saveGuestsBtn').on('click', () => {
   const guestEmails = $('#guestEmails').val().split(',')
     .map(e => e.trim())
-    .filter(e => e);
+    .filter(e => e.length > 0);
 
   console.log("📝 Saving guests to event:", currentEventForGuest);
 
@@ -38,6 +40,61 @@ $('#saveGuestsBtn').on('click', () => {
   });
 });
 
+// Helper functions for autocomplete
+function split(val) {
+  return val.split(/,\s*/);
+}
+
+function extractLast(term) {
+  return split(term).pop();
+}
+
+// jQuery UI Autocomplete Setup
+$(document).ready(function () {
+  $("#guestEmails")
+    .on("keydown", function (event) {
+      if (event.key === "Tab" && $(".ui-menu-item-wrapper:visible").length) {
+        event.preventDefault();
+      }
+    })
+    .autocomplete({
+      minLength: 1,
+      source: function (request, response) {
+        const lastTerm = extractLast(request.term);
+        if (!lastTerm) return;
+
+        $.ajax({
+          url: "/api/contacts/search",
+          dataType: "json",
+          data: { query: lastTerm },
+          success: function (data) {
+            console.log("📨 Contacts data returned from server:", data);
+            response($.map(data, function (item) {
+              return {
+                label: `${item.name} <${item.email}>`,
+                value: item.email
+              };
+            }));
+          },
+          error: function (xhr) {
+            console.error("❌ Failed to fetch contacts:", xhr.responseText);
+          }
+        });
+      },
+      focus: function () {
+        return false; // prevent autocomplete from overwriting whole field
+      },
+      select: function (event, ui) {
+        let terms = split(this.value);
+        terms.pop(); // remove current input
+        terms.push(ui.item.value); // add selected contact
+        terms.push(""); // add placeholder for next
+        this.value = terms.join(", ");
+        return false;
+      }
+    });
+});
+
 function renderGuestSection(event) {
   if (!event.guests || event.guests.length === 0) return "";
 
@@ -54,8 +111,7 @@ function renderGuestSection(event) {
     </div>
   `;
 }
-// Toggle guest list visibility when clicking the guests button
-$(document).on("click", ".toggle-guests", function() {
+
+$(document).on("click", ".toggle-guests", function () {
   $(this).next(".guest-list").slideToggle();
 });
-

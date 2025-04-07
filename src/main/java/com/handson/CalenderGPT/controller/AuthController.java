@@ -48,4 +48,19 @@ public class AuthController {
 
         return ResponseEntity.ok(response);
     }
+
+    @GetMapping("/logout")
+    public String logout(HttpSession session) {
+        // Delete session from DB (your custom table)
+        String sessionId = session.getId();
+        userSessionRepository.findBySessionId(sessionId).ifPresent(userSessionRepository::delete);
+
+        // Invalidate Spring Session
+        session.invalidate();
+
+        // Redirect to home or Google login again
+        return "redirect:/";
+    }
+
+
 }

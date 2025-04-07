@@ -172,3 +172,13 @@ body {
   margin: 0;
   padding-left: 20px;
 }
+
+.ui-autocomplete {
+  z-index: 1051 !important; /* higher than Bootstrap modal */
+  background-color: white;
+  max-height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid #ccc;
+}
+
