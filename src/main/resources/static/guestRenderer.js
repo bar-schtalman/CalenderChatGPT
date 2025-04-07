@@ -13,12 +13,11 @@ function openGuestModal(event) {
   $('#guestModal').modal('show');
 }
 
+// Save new guests
 $('#saveGuestsBtn').on('click', () => {
   const guestEmails = $('#guestEmails').val().split(',')
     .map(e => e.trim())
-    .filter(e => e.length > 0);
-
-  console.log("📝 Saving guests to event:", currentEventForGuest);
+    .filter(e => e);
 
   if (!currentEventForGuest || !currentEventForGuest.id || guestEmails.length === 0) {
     alert("Please enter at least one valid email.");
@@ -30,73 +29,72 @@ $('#saveGuestsBtn').on('click', () => {
     method: "PUT",
     contentType: "application/json",
     data: JSON.stringify(guestEmails),
-success: function (updatedEvent) {
-  $('#guestModal').modal('hide');
-  $(`#event-${updatedEvent.id}`).remove(); // Remove old event block
-  appendEvent(updatedEvent);              // Render updated event with new guests
-}
-,
+    success: function (updatedEvent) {
+      $('#guestModal').modal('hide');
+      $(`#event-${updatedEvent.id}`).replaceWith(window.renderEventCard(updatedEvent));
+    },
     error: function (xhr) {
       alert("Failed to add guests: " + xhr.responseText);
     }
   });
 });
 
-// Helper functions for autocomplete
-function split(val) {
-  return val.split(/,\s*/);
-}
+// Remove individual guest
+$(document).on("click", ".remove-guest-btn", function () {
+  const email = $(this).data("email");
+  const eventId = $(this).data("event-id");
 
-function extractLast(term) {
-  return split(term).pop();
-}
+  if (!confirm(`Remove guest: ${email}?`)) return;
 
-// jQuery UI Autocomplete Setup
-$(document).ready(function () {
-  $("#guestEmails")
-    .on("keydown", function (event) {
-      if (event.key === "Tab" && $(".ui-menu-item-wrapper:visible").length) {
-        event.preventDefault();
-      }
-    })
-    .autocomplete({
-      minLength: 1,
-      source: function (request, response) {
-        const lastTerm = extractLast(request.term);
-        if (!lastTerm) return;
-
-        $.ajax({
-          url: "/api/contacts/search",
-          dataType: "json",
-          data: { query: lastTerm },
-          success: function (data) {
-            console.log("📨 Contacts data returned from server:", data);
-            response($.map(data, function (item) {
-              return {
-                label: `${item.name} <${item.email}>`,
-                value: item.email
-              };
-            }));
-          },
-          error: function (xhr) {
-            console.error("❌ Failed to fetch contacts:", xhr.responseText);
-          }
-        });
-      },
-      focus: function () {
-        return false; // prevent autocomplete from overwriting whole field
-      },
-      select: function (event, ui) {
-        let terms = split(this.value);
-        terms.pop(); // remove current input
-        terms.push(ui.item.value); // add selected contact
-        terms.push(""); // add placeholder for next
-        this.value = terms.join(", ");
-        return false;
-      }
-    });
+  $.ajax({
+    url: `/api/events/${eventId}/guests/remove`,
+    method: "PUT",
+    contentType: "application/json",
+    data: JSON.stringify([email]),
+    success: function (updatedEvent) {
+      $(`#event-${updatedEvent.id}`).replaceWith(window.renderEventCard(updatedEvent));
+    },
+    error: function (xhr) {
+      alert("Failed to remove guest: " + xhr.responseText);
+    }
+  });
 });
 
+// Autocomplete contact suggestions
+$(document).ready(function () {
+  $("#guestEmails").autocomplete({
+    source: function (request, response) {
+      $.ajax({
+        url: "/api/contacts/search",
+        dataType: "json",
+        data: { query: request.term },
+        success: function (data) {
+          console.log("📨 Contacts data returned from server:", data);
+          response($.map(data, function (item) {
+            return {
+              label: `${item.name} <${item.email}>`,
+              value: item.email
+            };
+          }));
+        },
+        error: function (xhr) {
+          console.error("❌ Failed to fetch contacts:", xhr.responseText);
+        }
+      });
+    },
+    minLength: 1,
+    select: function (event, ui) {
+      let current = $('#guestEmails').val();
+      let emails = current.split(',').map(e => e.trim()).filter(e => e.length > 0);
+      emails.pop(); // remove the one being typed
+      emails.push(ui.item.value);
+      $('#guestEmails').val(emails.join(', ') + ', ');
+      return false;
+    }
+  });
+});
+
+// Render guest section in event card
 function renderGuestSection(event) {
   if (!event.guests || event.guests.length === 0) return "";
 
@@ -104,7 +102,12 @@ function renderGuestSection(event) {
     ? event.guests
     : event.guests.split(",").map(email => email.trim());
 
-  const guestList = guests.map(email => `<li>${email}</li>`).join("");
+  const guestList = guests.map(email => `
+    <li class="guest-item d-flex justify-content-between align-items-center">
+      ${email}
+      <button class="btn btn-sm btn-danger ml-2 remove-guest-btn" data-email="${email}" data-event-id="${event.id}">&times;</button>
+    </li>
+  `).join("");
 
   return `
     <div class="guest-section mt-2">
@@ -114,6 +117,7 @@ function renderGuestSection(event) {
   `;
 }
 
+// Toggle guest list visibility
 $(document).on("click", ".toggle-guests", function () {
   $(this).next(".guest-list").slideToggle();
 });

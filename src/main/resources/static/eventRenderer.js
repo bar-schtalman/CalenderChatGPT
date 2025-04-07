@@ -92,3 +92,6 @@ function refreshEventInUI(event) {
 
   $card.empty().append(summary, dateRow, buttons, guestSection);
 }
+
+// Make appendEvent globally accessible as renderEventCard
+window.renderEventCard = appendEvent;

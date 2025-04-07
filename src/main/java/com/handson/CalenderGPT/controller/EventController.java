@@ -5,6 +5,8 @@ import com.handson.CalenderGPT.model.Event;
 import com.handson.CalenderGPT.service.EventService;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpSession;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -64,5 +66,16 @@ public class EventController {
         String calendarId = getCalendarId();
         return eventService.addGuests(calendarId, eventId, guests);
     }
+
+
+    @PutMapping("/{eventId}/guests/remove")
+    public Map<String, String> removeGuests(
+            @PathVariable String eventId,
+            @RequestBody List<String> guestEmails
+    ) throws IOException {
+        String calendarId = getCalendarId();
+        return eventService.removeGuests(calendarId, eventId, guestEmails);
+    }
+
 
 }

@@ -187,4 +187,23 @@ public class EventService {
 
         return mapEvent(updatedEvent);
     }
+
+    public Map<String, String> removeGuests(String calendarId, String eventId, List<String> guestsToRemove) throws IOException {
+        com.google.api.services.calendar.model.Event event = googleCalendarClient.events()
+                .get(calendarId, eventId).execute();
+
+        if (event.getAttendees() == null) return mapEvent(event);
+
+        List<EventAttendee> updatedAttendees = event.getAttendees().stream()
+                .filter(attendee -> !guestsToRemove.contains(attendee.getEmail()))
+                .collect(Collectors.toList());
+
+        event.setAttendees(updatedAttendees);
+
+        com.google.api.services.calendar.model.Event updated = googleCalendarClient.events()
+                .update(calendarId, eventId, event).execute();
+
+        return mapEvent(updated);
+    }
+
 }
