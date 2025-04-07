@@ -15,22 +15,13 @@ public class Event {
     private String location;      // optional: "Zoom, Office, etc."
     private LocalDateTime start;  // or a String if you prefer
     private LocalDateTime end;    // or a String if you prefer
-
-    public List<String> getGuests() {
-        return guests;
-    }
-
-    public void setGuests(List<String> guests) {
-        this.guests = guests;
-    }
-
     private List<String> guests;
-
+    private String timeZone;      // ✅ Added time zone
 
     public Event() {
     }
 
-    public Event(String id, String summary, String description, String location, LocalDateTime start, LocalDateTime end, List<String> guests) {
+    public Event(String id, String summary, String description, String location, LocalDateTime start, LocalDateTime end, List<String> guests, String timeZone) {
         this.id = id;
         this.summary = summary;
         this.description = description;
@@ -38,6 +29,7 @@ public class Event {
         this.start = start;
         this.end = end;
         this.guests = guests;
+        this.timeZone = timeZone;
     }
 
     // Getters and setters
@@ -87,5 +79,21 @@ public class Event {
 
     public void setEnd(LocalDateTime end) {
         this.end = end;
+    }
+
+    public List<String> getGuests() {
+        return guests;
+    }
+
+    public void setGuests(List<String> guests) {
+        this.guests = guests;
+    }
+
+    public String getTimeZone() {
+        return timeZone;
+    }
+
+    public void setTimeZone(String timeZone) {
+        this.timeZone = timeZone;
     }
 }

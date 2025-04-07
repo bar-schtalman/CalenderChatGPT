@@ -42,7 +42,8 @@ $("#saveEdit").click(() => {
     description: "",
     location: "",
     start,
-    end
+    end,
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone // ✅ Add browser time zone
   };
 
   $.ajax({
@@ -54,16 +55,14 @@ $("#saveEdit").click(() => {
       $("#editModal").modal("hide");
       alert("✅ Event updated!");
 
-      // Re-fetch event and update UI
       $.ajax({
         url: `/api/events/${currentEditingEvent.id}`,
         method: "GET",
         success: (updatedData) => {
-          // Format fields for card display
           const startDateTime = new Date(updatedData.start);
           const endDateTime = new Date(updatedData.end);
 
-          updatedData.date = startDateTime.toLocaleDateString("en-GB"); // dd/mm/yyyy
+          updatedData.date = startDateTime.toLocaleDateString("en-GB");
           updatedData.time = `${startDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
           refreshEventInUI(updatedData);

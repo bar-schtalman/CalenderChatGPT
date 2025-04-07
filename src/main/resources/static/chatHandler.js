@@ -1,13 +1,9 @@
 $(document).ready(() => {
-  // ✅ Auth button
-  $("#authorizeButton").click(() => {
-    window.location.href = "/oauth2/authorization/google";
-  });
+  const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  console.log("🕒 Detected browser time zone:", browserTimeZone);
 
-  // ✅ Store selected calendar
   let selectedCalendarId = null;
 
-  // ✅ Load calendars from backend and populate dropdown
   function loadCalendars() {
     $.ajax({
       url: '/api/google-calendar/calendars',
@@ -38,7 +34,6 @@ $(document).ready(() => {
           }
 
           selectedCalendarId = defaultCalendar || data[0].id;
-
           updateServerCalendar(selectedCalendarId);
         } else {
           calendarSelect.append('<option>No calendars found</option>');
@@ -51,7 +46,6 @@ $(document).ready(() => {
     });
   }
 
-  // ✅ Call loadCalendars when page is ready
   loadCalendars();
 
   function updateServerCalendar(calendarId) {
@@ -75,7 +69,6 @@ $(document).ready(() => {
     updateServerCalendar(selectedCalendarId);
   });
 
-  // ✅ Chat form submission
   $("#chatForm").off("submit").on("submit", function (e) {
     e.preventDefault();
 
@@ -118,7 +111,6 @@ $(document).ready(() => {
                   }
                 });
               } else {
-                // Always treat it as an event with ID (new or not)
                 appendMessage("ai", `✅ '${msg.summary}' created at ${msg.date}, ${msg.time}`);
                 appendEvent(msg);
               }
