@@ -30,10 +30,12 @@ $('#saveGuestsBtn').on('click', () => {
     method: "PUT",
     contentType: "application/json",
     data: JSON.stringify(guestEmails),
-    success: function (link) {
-      $('#guestModal').modal('hide');
-      appendMessage("ai", `👥 Guests added successfully. View it <a href="${link}" target="_blank">here</a>`);
-    },
+success: function (updatedEvent) {
+  $('#guestModal').modal('hide');
+  $(`#event-${updatedEvent.id}`).remove(); // Remove old event block
+  appendEvent(updatedEvent);              // Render updated event with new guests
+}
+,
     error: function (xhr) {
       alert("Failed to add guests: " + xhr.responseText);
     }

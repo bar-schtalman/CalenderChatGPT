@@ -116,24 +116,48 @@ public class EventService {
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(googleDateTime.getValue()), ZoneId.systemDefault());
     }
 
-    private String formatDate(DateTime googleDateTime) {
-        return (googleDateTime != null)
-                ? convertToLocalDateTime(googleDateTime).format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"))
-                : "";
+    private String formatDate(EventDateTime eventDateTime) {
+        if (eventDateTime == null) return "N/A";
+        DateTime dateTime = eventDateTime.getDateTime() != null
+                ? eventDateTime.getDateTime()
+                : eventDateTime.getDate();
+        return (dateTime != null)
+                ? convertToLocalDateTime(dateTime).format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"))
+                : "N/A";
     }
 
     private Map<String, String> mapEvent(com.google.api.services.calendar.model.Event event) {
         Map<String, String> map = new HashMap<>();
         map.put("id", event.getId());
         map.put("summary", event.getSummary());
-        map.put("start", formatDate(event.getStart().getDateTime()));
-        map.put("end", formatDate(event.getEnd().getDateTime()));
         map.put("location", Optional.ofNullable(event.getLocation()).orElse(""));
         map.put("description", Optional.ofNullable(event.getDescription()).orElse(""));
 
+        // Date/time logic with fallback support
+        EventDateTime startDt = event.getStart();
+        EventDateTime endDt = event.getEnd();
+
+        DateTime startRaw = (startDt != null && startDt.getDateTime() != null) ? startDt.getDateTime() : startDt.getDate();
+        DateTime endRaw = (endDt != null && endDt.getDateTime() != null) ? endDt.getDateTime() : endDt.getDate();
+
+        if (startRaw != null && endRaw != null) {
+            LocalDateTime startLdt = convertToLocalDateTime(startRaw);
+            LocalDateTime endLdt = convertToLocalDateTime(endRaw);
+
+            map.put("date", startLdt.format(DateTimeFormatter.ofPattern("dd-MM-yyyy")));
+            map.put("time", startLdt.format(DateTimeFormatter.ofPattern("HH:mm")) +
+                    " - " + endLdt.format(DateTimeFormatter.ofPattern("HH:mm")));
+        } else {
+            map.put("date", "?");
+            map.put("time", "N/A - ?");
+        }
+
+        map.put("start", formatDate(startDt));
+        map.put("end", formatDate(endDt));
+
         if (event.getAttendees() != null) {
             List<String> guestEmails = event.getAttendees().stream()
-                    .map(com.google.api.services.calendar.model.EventAttendee::getEmail)
+                    .map(EventAttendee::getEmail)
                     .filter(email -> email != null && !email.trim().isEmpty())
                     .collect(Collectors.toList());
 
@@ -145,7 +169,7 @@ public class EventService {
         return map;
     }
 
-    public String addGuests(String calendarId, String eventId, List<String> newGuests) throws IOException {
+    public Map<String, String> addGuests(String calendarId, String eventId, List<String> newGuests) throws IOException {
         com.google.api.services.calendar.model.Event event =
                 googleCalendarClient.events().get(calendarId, eventId).execute();
 
@@ -158,6 +182,9 @@ public class EventService {
         }
 
         event.setAttendees(attendees);
-        return googleCalendarClient.events().update(calendarId, eventId, event).execute().getHtmlLink();
+        com.google.api.services.calendar.model.Event updatedEvent =
+                googleCalendarClient.events().update(calendarId, eventId, event).execute();
+
+        return mapEvent(updatedEvent);
     }
 }

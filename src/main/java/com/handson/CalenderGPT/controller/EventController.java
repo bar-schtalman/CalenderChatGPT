@@ -60,7 +60,7 @@ public class EventController {
     }
 
     @PutMapping("/{eventId}/guests")
-    public String addGuestsToEvent(@PathVariable String eventId, @RequestBody List<String> guests) throws Exception {
+    public Map<String, String> addGuestsToEvent(@PathVariable String eventId, @RequestBody List<String> guests) throws Exception {
         String calendarId = getCalendarId();
         return eventService.addGuests(calendarId, eventId, guests);
     }
