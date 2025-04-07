@@ -86,36 +86,9 @@ $(document).ready(() => {
 
           parsed.forEach((msg) => {
             if (msg.role === "event") {
-              if (msg.intent === "VIEW" && msg.start && msg.end) {
-                $.ajax({
-                  url: "/api/events/view",
-                  method: "GET",
-                  data: {
-                    start: msg.start,
-                    end: msg.end,
-                    calendarId: selectedCalendarId
-                  },
-                  success: function (events) {
-                    if (!events || events.length === 0) {
-                      appendMessage("ai", "📭 No events found for that time range.");
-                    } else {
-                      appendMessage("ai", `📅 Found ${events.length} event(s):`);
-                      events.forEach((event) => {
-                        console.log("📦 Event fetched from backend:", event);
-                        appendEvent(event);
-                      });
-                    }
-                  },
-                  error: function (xhr) {
-                    appendMessage("ai", "❌ Failed to fetch events: " + xhr.responseText);
-                  }
-                });
-              } else {
-                appendMessage("ai", `✅ '${msg.summary}' created at ${msg.date}, ${msg.time}`);
-                appendEvent(msg);
-              }
+              appendEvent(msg); // ✅ Always just append event card
             } else {
-              appendMessage(msg.role, msg.content);
+              appendMessage(msg.role, msg.content); // 📅 "Events for X" message OR ai reply
             }
           });
         } catch (e) {
