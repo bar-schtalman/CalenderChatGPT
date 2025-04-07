@@ -1,6 +1,7 @@
 package com.handson.CalenderGPT.model;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Your custom Event model to store data locally.
@@ -15,16 +16,28 @@ public class Event {
     private LocalDateTime start;  // or a String if you prefer
     private LocalDateTime end;    // or a String if you prefer
 
+    public List<String> getGuests() {
+        return guests;
+    }
+
+    public void setGuests(List<String> guests) {
+        this.guests = guests;
+    }
+
+    private List<String> guests;
+
+
     public Event() {
     }
 
-    public Event(String id, String summary, String description, String location, LocalDateTime start, LocalDateTime end) {
+    public Event(String id, String summary, String description, String location, LocalDateTime start, LocalDateTime end, List<String> guests) {
         this.id = id;
         this.summary = summary;
         this.description = description;
         this.location = location;
         this.start = start;
         this.end = end;
+        this.guests = guests;
     }
 
     // Getters and setters

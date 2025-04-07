@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class EventService {
@@ -26,7 +27,7 @@ public class EventService {
         this.googleCalendarClient = calendar;
     }
 
-    public String createEvent(String calendarId, Event eventRequest) throws IOException {
+    public Map<String, String> createEvent(String calendarId, Event eventRequest) throws IOException {
         DateTime startDateTime = convertToGoogleDateTime(eventRequest.getStart());
         DateTime endDateTime = convertToGoogleDateTime(eventRequest.getEnd());
 
@@ -38,8 +39,24 @@ public class EventService {
         googleEvent.setStart(new EventDateTime().setDateTime(startDateTime).setTimeZone("UTC"));
         googleEvent.setEnd(new EventDateTime().setDateTime(endDateTime).setTimeZone("UTC"));
 
-        return googleCalendarClient.events().insert(calendarId, googleEvent).execute().getHtmlLink();
+        // ✅ Set guests if provided
+        List<String> guestEmails = eventRequest.getGuests();
+        if (guestEmails != null && !guestEmails.isEmpty()) {
+            List<EventAttendee> attendees = guestEmails.stream()
+                    .map(email -> new EventAttendee().setEmail(email))
+                    .collect(Collectors.toList());
+            googleEvent.setAttendees(attendees);
+        }
+
+        com.google.api.services.calendar.model.Event created = googleCalendarClient.events()
+                .insert(calendarId, googleEvent)
+                .execute();
+
+        // ✅ Return full mapped event (including ID)
+        return mapEvent(created);
     }
+
+
 
     public String updateEvent(String calendarId, String eventId, Event eventRequest) throws IOException {
         com.google.api.services.calendar.model.Event existingEvent =
@@ -48,22 +65,34 @@ public class EventService {
         existingEvent.setSummary(eventRequest.getSummary());
         existingEvent.setLocation(eventRequest.getLocation());
         existingEvent.setDescription(eventRequest.getDescription());
-
         existingEvent.setStart(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getStart())).setTimeZone("UTC"));
         existingEvent.setEnd(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getEnd())).setTimeZone("UTC"));
 
+        // ✅ Update guests
+        List<String> guestEmails = eventRequest.getGuests();
+        if (guestEmails != null && !guestEmails.isEmpty()) {
+            List<EventAttendee> attendees = new ArrayList<>();
+            for (String email : guestEmails) {
+                attendees.add(new EventAttendee().setEmail(email));
+            }
+            existingEvent.setAttendees(attendees);
+        }
+
         return googleCalendarClient.events().update(calendarId, eventId, existingEvent).execute().getHtmlLink();
     }
+
 
     public List<Map<String, String>> getEventsInDateRange(String calendarId, String startDate, String endDate) throws IOException {
         DateTime timeMin = new DateTime(startDate);
         DateTime timeMax = new DateTime(endDate);
 
+        // 🔑 FIX: explicitly request attendees
         Events events = googleCalendarClient.events().list(calendarId)
                 .setTimeMin(timeMin)
                 .setTimeMax(timeMax)
                 .setOrderBy("startTime")
                 .setSingleEvents(true)
+                .setFields("items(id,summary,start,end,location,description,attendees)") // ✅ Include attendees explicitly
                 .execute();
 
         List<Map<String, String>> simplifiedEvents = new ArrayList<>();
@@ -73,6 +102,7 @@ public class EventService {
 
         return simplifiedEvents;
     }
+
 
     public Map<String, String> getEventById(String calendarId, String eventId) throws IOException {
         com.google.api.services.calendar.model.Event event =
@@ -108,6 +138,37 @@ public class EventService {
         map.put("end", formatDate(event.getEnd().getDateTime()));
         map.put("location", Optional.ofNullable(event.getLocation()).orElse(""));
         map.put("description", Optional.ofNullable(event.getDescription()).orElse(""));
+
+        // ✅ Add guests only if valid non-blank emails exist
+        if (event.getAttendees() != null) {
+            List<String> guestEmails = event.getAttendees().stream()
+                    .map(com.google.api.services.calendar.model.EventAttendee::getEmail)
+                    .filter(email -> email != null && !email.trim().isEmpty())
+                    .collect(Collectors.toList());
+
+            if (!guestEmails.isEmpty()) {
+                map.put("guests", String.join(",", guestEmails));
+            }
+        }
+
         return map;
     }
+
+    public String addGuests(String calendarId, String eventId, List<String> newGuests) throws IOException {
+        com.google.api.services.calendar.model.Event event =
+                googleCalendarClient.events().get(calendarId, eventId).execute();
+
+        List<EventAttendee> attendees = event.getAttendees() != null ? new ArrayList<>(event.getAttendees()) : new ArrayList<>();
+
+        for (String guest : newGuests) {
+            if (attendees.stream().noneMatch(a -> a.getEmail().equalsIgnoreCase(guest))) {
+                attendees.add(new EventAttendee().setEmail(guest));
+            }
+        }
+
+        event.setAttendees(attendees);
+        return googleCalendarClient.events().update(calendarId, eventId, event).execute().getHtmlLink();
+    }
+
+
 }

@@ -39,7 +39,6 @@ $(document).ready(() => {
 
           selectedCalendarId = defaultCalendar || data[0].id;
 
-          // ✅ Immediately update server session with default calendar
           updateServerCalendar(selectedCalendarId);
         } else {
           calendarSelect.append('<option>No calendars found</option>');
@@ -52,10 +51,9 @@ $(document).ready(() => {
     });
   }
 
-  // ✅ Call loadCalendars when the page is ready
+  // ✅ Call loadCalendars when page is ready
   loadCalendars();
 
-  // ✅ Function to update selected calendar on the server
   function updateServerCalendar(calendarId) {
     $.ajax({
       url: '/api/google-calendar/calendars/select-calendar',
@@ -70,13 +68,10 @@ $(document).ready(() => {
     });
   }
 
-  // ✅ Update calendar when selection changes
   $('#calendarSelect').on('change', function () {
     selectedCalendarId = $(this).val();
     console.log("Selected Calendar ID: " + selectedCalendarId);
     sessionStorage.setItem('selectedCalendarId', selectedCalendarId);
-
-    // ✅ Update calendar selection immediately on the server
     updateServerCalendar(selectedCalendarId);
   });
 
@@ -112,17 +107,19 @@ $(document).ready(() => {
                       appendMessage("ai", "📭 No events found for that time range.");
                     } else {
                       appendMessage("ai", `📅 Found ${events.length} event(s):`);
-                      events.forEach((event) => appendEvent(event));
+                      events.forEach((event) => {
+                        console.log("📦 Event fetched from backend:", event);
+                        appendEvent(event);
+                      });
                     }
                   },
                   error: function (xhr) {
                     appendMessage("ai", "❌ Failed to fetch events: " + xhr.responseText);
                   }
                 });
-              } else if (msg.created) {
-                appendMessage("ai", `✅ '${msg.summary}' created at ${msg.date}, ${msg.time}`);
-                appendEvent(msg);
               } else {
+                // Always treat it as an event with ID (new or not)
+                appendMessage("ai", `✅ '${msg.summary}' created at ${msg.date}, ${msg.time}`);
                 appendEvent(msg);
               }
             } else {

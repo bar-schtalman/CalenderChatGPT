@@ -1,5 +1,5 @@
 function appendMessage(sender, text) {
-  const msgDiv = $("<div></div>").addClass("message " + sender).text(text);
+  const msgDiv = $("<div></div>").addClass("message " + sender).html(text);
   $("#chatWindow").append(msgDiv).append("<div class='clear'></div>");
   scrollToBottom();
 }
@@ -36,11 +36,15 @@ function appendEvent(event) {
 
   const guestBtn = $("<button class='guest-event btn btn-info btn-sm'></button>")
     .html("➕")
-    .on("click", () => openGuestModal(event));
+    .on("click", () => {
+      console.log("Opening guest modal for event:", event.id);
+      openGuestModal(event);
+    });
 
   const buttons = $("<div class='button-container'></div>").append(editBtn, deleteBtn, guestBtn);
+  const guestSection = renderGuestSection(event);
 
-  card.append(summary, dateRow, buttons);
+  card.append(summary, dateRow, buttons, guestSection);
   $("#chatWindow").append(card);
   scrollToBottom();
 }
@@ -78,9 +82,13 @@ function refreshEventInUI(event) {
 
   const guestBtn = $("<button class='guest-event btn btn-info btn-sm'></button>")
     .html("➕")
-    .on("click", () => openGuestModal(event));
+    .on("click", () => {
+      console.log("Refreshing and opening guest modal for event:", event.id);
+      openGuestModal(event);
+    });
 
   const buttons = $("<div class='button-container'></div>").append(editBtn, deleteBtn, guestBtn);
+  const guestSection = renderGuestSection(event);
 
-  $card.empty().append(summary, dateRow, buttons);
+  $card.empty().append(summary, dateRow, buttons, guestSection);
 }

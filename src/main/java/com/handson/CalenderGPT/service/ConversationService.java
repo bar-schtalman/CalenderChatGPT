@@ -112,34 +112,43 @@ public class ConversationService {
 
         List<Map<String, String>> responseList = new ArrayList<>();
         for (Map<String, String> event : events) {
-            responseList.add(Map.of(
-                    "role", "event",
-                    "summary", event.get("summary"),
-                    "date", event.get("start").split(" ")[0],
-                    "time", event.get("start").split(" ")[1] + " - " + event.get("end").split(" ")[1],
-                    "location", event.getOrDefault("location", "No location"),
-                    "calendarId", calendarId,
-                    "id", event.get("id")
-            ));
+            Map<String, String> eventResponse = new HashMap<>();
+            eventResponse.put("role", "event");
+            eventResponse.put("summary", event.get("summary"));
+            eventResponse.put("date", event.get("start").split(" ")[0]);
+            eventResponse.put("time", event.get("start").split(" ")[1] + " - " + event.get("end").split(" ")[1]);
+            eventResponse.put("location", event.getOrDefault("location", "No location"));
+            eventResponse.put("calendarId", calendarId);
+            eventResponse.put("id", event.get("id"));
+
+            if (event.containsKey("guests") && !event.get("guests").isEmpty()) {
+                eventResponse.put("guests", event.get("guests"));
+            }
+
+            responseList.add(eventResponse);
         }
+
         return new ObjectMapper().writeValueAsString(responseList);
     }
 
     private String handleCreateEvent(JsonNode jsonNode) throws Exception {
         Event event = parseEventDetails(jsonNode);
         String calendarId = calendarContext.getCalendarId();
-        eventService.createEvent(calendarId, event);
+
+        // ⚠️ FIX HERE: Capture the created event returned by the service.
+        Map<String, String> createdEvent = eventService.createEvent(calendarId, event);
 
         Map<String, String> response = new HashMap<>();
         response.put("role", "event");
-        response.put("summary", event.getSummary());
-        response.put("date", event.getStart().format(OUTPUT_DATE_FORMATTER));
-        response.put("time", event.getStart().format(OUTPUT_TIME_FORMATTER) + " - " + event.getEnd().format(OUTPUT_TIME_FORMATTER));
+        response.put("summary", createdEvent.get("summary"));
+        response.put("date", createdEvent.get("start").split(" ")[0]);
+        response.put("time", createdEvent.get("start").split(" ")[1] + " - " + createdEvent.get("end").split(" ")[1]);
         response.put("calendarId", calendarId);
-        response.put("id", event.getId() != null ? event.getId() : "N/A");
+        response.put("id", createdEvent.getOrDefault("id", "N/A")); // Now correctly fetched ID
 
         return new ObjectMapper().writeValueAsString(List.of(response));
     }
+
 
 
     private Event parseEventDetails(JsonNode jsonNode) {

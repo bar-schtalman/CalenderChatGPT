@@ -21,10 +21,11 @@ public class EventController {
     }
 
     @PostMapping("/create")
-    public String createEvent(@RequestBody Event eventRequest) throws Exception {
+    public Map<String, String> createEvent(@RequestBody Event eventRequest) throws Exception {
         String calendarId = getCalendarId();
         return eventService.createEvent(calendarId, eventRequest);
     }
+
 
     @PutMapping("/update/{eventId}")
     public String updateEvent(@PathVariable String eventId, @RequestBody Event eventRequest) throws Exception {
@@ -57,4 +58,11 @@ public class EventController {
         }
         return calendarId;
     }
+
+    @PutMapping("/{eventId}/guests")
+    public String addGuestsToEvent(@PathVariable String eventId, @RequestBody List<String> guests) throws Exception {
+        String calendarId = getCalendarId();
+        return eventService.addGuests(calendarId, eventId, guests);
+    }
+
 }

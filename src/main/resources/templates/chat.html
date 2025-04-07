@@ -1,23 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns:th="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="UTF-8">
   <title>Chat with AI</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- Bootstrap CSS -->
+  <!-- ✅ CSS -->
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-
-  <!-- Custom CSS -->
   <link rel="stylesheet" th:href="@{/styles.css}" href="/styles.css">
+
+  <!-- ✅ JS - jQuery + Bootstrap (MUST come before your scripts) -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
 </head>
 <body>
 
 <div id="chatPage" class="chat-container">
-  <!-- Removed Auth Button -->
   <div class="d-flex justify-content-between align-items-center">
     <h2 class="text-center flex-grow-1">Chat with AI</h2>
-    <!-- Calendar Dropdown Menu -->
     <div class="form-group mb-0 ml-3">
       <label for="calendarSelect" class="mb-0" style="font-size: 0.9rem;">Select Calendar:</label>
       <select id="calendarSelect" class="form-control form-control-sm ml-2"></select>
@@ -78,13 +78,36 @@
   </div>
 </div>
 
-<!-- Scripts -->
-<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+<!-- Add Guest Modal -->
+<div class="modal fade" id="guestModal" tabindex="-1" role="dialog" aria-labelledby="guestModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="guestModalLabel">Add Guests</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="guestForm">
+          <div class="form-group">
+            <label for="guestEmails">Enter guest emails (comma-separated):</label>
+            <input type="text" class="form-control" id="guestEmails" placeholder="guest1@example.com, guest2@example.com">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="saveGuestsBtn">Add Guests</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-<!-- App JS files (served from /static) -->
+<!-- ✅ Custom Scripts (after jQuery/Bootstrap) -->
 <script th:src="@{/utils.js}" src="/utils.js"></script>
 <script th:src="@{/apiClient.js}" src="/apiClient.js"></script>
+<script th:src="@{/guestRenderer.js}" src="/guestRenderer.js"></script>
 <script th:src="@{/eventRenderer.js}" src="/eventRenderer.js"></script>
 <script th:src="@{/eventEditor.js}" src="/eventEditor.js"></script>
 <script th:src="@{/chatHandler.js}" src="/chatHandler.js"></script>
