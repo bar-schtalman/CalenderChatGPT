@@ -6,17 +6,34 @@ import java.util.UUID;
 
 @Entity
 public class UserMessage {
-    public UserMessage(){};
 
-    public UserMessage(User user,boolean isUser, String content) {
+    @Id
+    @GeneratedValue
+    private UUID id;
+
+    @ManyToOne(optional = false)
+    private User user;
+
+    @ManyToOne(optional = true) // was false before
+    @JoinColumn(name = "chat_session_id")
+    private ChatSession chatSession;
+
+    private boolean isUser; // true = user message, false = assistant response
+
+    @Column(columnDefinition = "TEXT")
+    private String content;
+
+    private LocalDateTime timestamp = LocalDateTime.now();
+
+    public UserMessage() {}
+
+    public UserMessage(User user, ChatSession chatSession, boolean isUser, String content) {
         this.user = user;
+        this.chatSession = chatSession;
         this.isUser = isUser;
         this.content = content;
         this.timestamp = LocalDateTime.now();
     }
-
-    @ManyToOne(optional = false)
-    private User user;
 
     public UUID getId() {
         return id;
@@ -25,8 +42,6 @@ public class UserMessage {
     public void setId(UUID id) {
         this.id = id;
     }
-
-
 
     public boolean isUser() {
         return isUser;
@@ -52,16 +67,19 @@ public class UserMessage {
         this.timestamp = timestamp;
     }
 
-    @Id
-    @GeneratedValue
-    private UUID id;
+    public User getUser() {
+        return user;
+    }
 
+    public void setUser(User user) {
+        this.user = user;
+    }
 
+    public ChatSession getChatSession() {
+        return chatSession;
+    }
 
-    private boolean isUser; // true = user message, false = assistant response
-
-    @Column(columnDefinition = "TEXT")
-    private String content;
-
-    private LocalDateTime timestamp = LocalDateTime.now();
+    public void setChatSession(ChatSession chatSession) {
+        this.chatSession = chatSession;
+    }
 }

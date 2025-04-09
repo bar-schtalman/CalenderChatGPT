@@ -3,11 +3,8 @@ package com.handson.CalenderGPT.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.handson.CalenderGPT.context.CalendarContext;
-import com.handson.CalenderGPT.model.Event;
-import com.handson.CalenderGPT.model.IntentType;
-import com.handson.CalenderGPT.model.PendingEventState;
-import com.handson.CalenderGPT.model.User;
-import com.handson.CalenderGPT.model.UserMessage;
+import com.handson.CalenderGPT.model.*;
+import com.handson.CalenderGPT.repository.ChatSessionRepository;
 import com.handson.CalenderGPT.repository.UserMessageRepository;
 import com.handson.CalenderGPT.repository.UserRepository;
 import com.theokanning.openai.completion.chat.ChatCompletionResult;
@@ -29,6 +26,7 @@ public class ConversationService {
     private final ChatGPTService chatGPTService;
     private final UserMessageRepository messageRepository;
     private final UserRepository userRepository;
+    private final ChatSessionRepository chatSessionRepository;
     private final ClarificationService clarificationService;
     private final EventResponseBuilder eventResponseBuilder;
     private final EventParser eventParser;
@@ -40,6 +38,7 @@ public class ConversationService {
                                ChatGPTService chatGPTService,
                                UserMessageRepository messageRepository,
                                UserRepository userRepository,
+                               ChatSessionRepository chatSessionRepository,
                                ClarificationService clarificationService,
                                EventResponseBuilder eventResponseBuilder,
                                EventParser eventParser) {
@@ -49,6 +48,7 @@ public class ConversationService {
         this.chatGPTService = chatGPTService;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
+        this.chatSessionRepository = chatSessionRepository;
         this.clarificationService = clarificationService;
         this.eventResponseBuilder = eventResponseBuilder;
         this.eventParser = eventParser;
@@ -57,7 +57,8 @@ public class ConversationService {
     @Transactional
     public String handlePrompt(String prompt, UUID userId) {
         User user = userRepository.findById(userId).orElseThrow();
-        messageRepository.save(new UserMessage(user, true, prompt));
+        ChatSession session = getOrCreateLatestSession(user);
+        messageRepository.save(new UserMessage(user, session, true, prompt));
 
         // Step 1: Clarify ongoing prompt
         PendingEventState previousState = pendingEvents.get(userId);
@@ -82,7 +83,7 @@ public class ConversationService {
             );
             ChatCompletionResult result = chatGPTService.callChatGPT(messages);
             String reply = result.getChoices().get(0).getMessage().getContent().trim();
-            messageRepository.save(new UserMessage(user, false, reply));
+            messageRepository.save(new UserMessage(user, session, false, reply));
             return buildAiMessage(reply);
         }
 
@@ -138,6 +139,17 @@ public class ConversationService {
         } catch (IOException e) {
             return buildAiMessage("❌ Failed to create the event: " + e.getMessage());
         }
+    }
+
+    private ChatSession getOrCreateLatestSession(User user) {
+        return chatSessionRepository.findByUserIdOrderByCreatedAtDesc(user.getId()).stream()
+                .findFirst()
+                .orElseGet(() -> {
+                    ChatSession session = new ChatSession();
+                    session.setUser(user);
+                    session.setTitle("New Chat");
+                    return chatSessionRepository.save(session);
+                });
     }
 
     private IntentType mapIntentType(String extractedIntent) {
