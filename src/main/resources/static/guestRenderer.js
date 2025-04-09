@@ -1,5 +1,3 @@
-// guestRenderer.js
-
 let currentEventForGuest = null;
 
 function openGuestModal(event) {
@@ -60,38 +58,57 @@ $(document).on("click", ".remove-guest-btn", function () {
   });
 });
 
+// Utility for splitting emails
+function splitEmails(val) {
+  return val.split(/,\s*/);
+}
+
+function extractLastEmailFragment(term) {
+  return splitEmails(term).pop();
+}
+
 // Autocomplete contact suggestions
 $(document).ready(function () {
-  $("#guestEmails").autocomplete({
-    source: function (request, response) {
-      $.ajax({
-        url: "/api/contacts/search",
-        dataType: "json",
-        data: { query: request.term },
-        success: function (data) {
-          console.log("📨 Contacts data returned from server:", data);
-          response($.map(data, function (item) {
-            return {
-              label: `${item.name} <${item.email}>`,
-              value: item.email
-            };
-          }));
-        },
-        error: function (xhr) {
-          console.error("❌ Failed to fetch contacts:", xhr.responseText);
-        }
-      });
-    },
-    minLength: 1,
-    select: function (event, ui) {
-      let current = $('#guestEmails').val();
-      let emails = current.split(',').map(e => e.trim()).filter(e => e.length > 0);
-      emails.pop(); // remove the one being typed
-      emails.push(ui.item.value);
-      $('#guestEmails').val(emails.join(', ') + ', ');
-      return false;
-    }
-  });
+  $("#guestEmails")
+    .on("keydown", function (event) {
+      if (event.key === "Tab" && $(".ui-menu-item-wrapper:visible").length) {
+        event.preventDefault();
+      }
+    })
+    .autocomplete({
+      minLength: 1,
+      source: function (request, response) {
+        const term = extractLastEmailFragment(request.term);
+        $.ajax({
+          url: "/api/contacts/search",
+          dataType: "json",
+          data: { query: term },
+          success: function (data) {
+            console.log("📨 Contacts data returned from server:", data);
+            response($.map(data, function (item) {
+              return {
+                label: `${item.name} <${item.email}>`,
+                value: item.email
+              };
+            }));
+          },
+          error: function (xhr) {
+            console.error("❌ Failed to fetch contacts:", xhr.responseText);
+          }
+        });
+      },
+      focus: function () {
+        return false;
+      },
+      select: function (event, ui) {
+        let terms = splitEmails(this.value);
+        terms.pop();
+        terms.push(ui.item.value);
+        terms.push("");
+        this.value = terms.join(", ");
+        return false;
+      }
+    });
 });
 
 // Render guest section in event card
