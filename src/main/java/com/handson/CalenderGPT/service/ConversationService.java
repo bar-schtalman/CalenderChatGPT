@@ -3,7 +3,11 @@ package com.handson.CalenderGPT.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.handson.CalenderGPT.context.CalendarContext;
-import com.handson.CalenderGPT.model.*;
+import com.handson.CalenderGPT.model.Event;
+import com.handson.CalenderGPT.model.IntentType;
+import com.handson.CalenderGPT.model.PendingEventState;
+import com.handson.CalenderGPT.model.User;
+import com.handson.CalenderGPT.model.UserMessage;
 import com.handson.CalenderGPT.repository.UserMessageRepository;
 import com.handson.CalenderGPT.repository.UserRepository;
 import com.theokanning.openai.completion.chat.ChatCompletionResult;
@@ -11,10 +15,9 @@ import com.theokanning.openai.completion.chat.ChatMessage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
@@ -26,61 +29,115 @@ public class ConversationService {
     private final ChatGPTService chatGPTService;
     private final UserMessageRepository messageRepository;
     private final UserRepository userRepository;
-
-    private static final DateTimeFormatter OUTPUT_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-    private static final DateTimeFormatter OUTPUT_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
-    private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_DATE_TIME;
+    private final ClarificationService clarificationService;
+    private final EventResponseBuilder eventResponseBuilder;
+    private final EventParser eventParser;
+    private final Map<UUID, PendingEventState> pendingEvents = new HashMap<>();
 
     public ConversationService(IntentService intentService,
                                EventService eventService,
                                CalendarContext calendarContext,
                                ChatGPTService chatGPTService,
                                UserMessageRepository messageRepository,
-                               UserRepository userRepository) {
+                               UserRepository userRepository,
+                               ClarificationService clarificationService,
+                               EventResponseBuilder eventResponseBuilder,
+                               EventParser eventParser) {
         this.intentService = intentService;
         this.eventService = eventService;
         this.calendarContext = calendarContext;
         this.chatGPTService = chatGPTService;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
+        this.clarificationService = clarificationService;
+        this.eventResponseBuilder = eventResponseBuilder;
+        this.eventParser = eventParser;
     }
 
     @Transactional
     public String handlePrompt(String prompt, UUID userId) {
+        User user = userRepository.findById(userId).orElseThrow();
+        messageRepository.save(new UserMessage(user, true, prompt));
+
+        // Step 1: Clarify ongoing prompt
+        PendingEventState previousState = pendingEvents.get(userId);
+        String mergedPrompt = previousState != null
+                ? previousState.getSummary() + " " + prompt
+                : prompt;
+
+        // Step 2: Extract event intent
+        String extractedJson = intentService.extractDetailsFromPrompt(mergedPrompt);
+        JsonNode json;
         try {
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
-
-            messageRepository.save(new UserMessage(user, true, prompt));
-
-            List<UserMessage> pastMessages = messageRepository.findByUserIdOrderByTimestampAsc(userId);
-            List<ChatMessage> openAiHistory = new ArrayList<>();
-            for (UserMessage msg : pastMessages) {
-                openAiHistory.add(new ChatMessage(msg.isUser() ? "user" : "assistant", msg.getContent()));
-            }
-
-            String extractedJson = intentService.extractDetailsFromPrompt(prompt);
-            JsonNode jsonNode = new ObjectMapper().readTree(extractedJson);
-
-            IntentType intent = mapIntentType(jsonNode.get("intent").asText());
-
-            return switch (intent) {
-                case VIEW_EVENTS -> handleViewEvents(jsonNode);
-                case CREATE_EVENT -> handleCreateEvent(jsonNode);
-                case EDIT_EVENT, DELETE_EVENT -> handleIntentPreview(intent, jsonNode);
-                case NONE -> chatWithGPT(prompt, user, openAiHistory);
-            };
+            json = new ObjectMapper().readTree(extractedJson);
         } catch (Exception e) {
-            e.printStackTrace();
-            return buildErrorResponse("❌ Error: " + e.getMessage());
+            return buildAiMessage("⚠️ I couldn't understand that. Can you rephrase?");
         }
-    }
 
-    private String chatWithGPT(String prompt, User user, List<ChatMessage> history) {
-        ChatCompletionResult result = chatGPTService.callChatGPT(history);
-        String reply = result.getChoices().get(0).getMessage().getContent().replaceAll("\n+", " ");
-        messageRepository.save(new UserMessage(user, false, reply));
-        return buildAiMessage(reply);
+        String intentStr = json.path("intent").asText("");
+        if (intentStr.equalsIgnoreCase("NONE")) {
+            List<ChatMessage> messages = List.of(
+                    new ChatMessage("system", "You are a helpful assistant."),
+                    new ChatMessage("user", prompt)
+            );
+            ChatCompletionResult result = chatGPTService.callChatGPT(messages);
+            String reply = result.getChoices().get(0).getMessage().getContent().trim();
+            messageRepository.save(new UserMessage(user, false, reply));
+            return buildAiMessage(reply);
+        }
+
+        // Step 3: Clear if intent changed
+        if (previousState != null && !previousState.getIntent().equalsIgnoreCase(intentStr)) {
+            pendingEvents.remove(userId);
+            previousState = null;
+        }
+
+        // Step 4: Handle VIEW
+        IntentType intent = mapIntentType(intentStr);
+        if (intent == IntentType.VIEW_EVENTS) {
+            try {
+                String start = json.get("start").asText();
+                String end = json.get("end").asText();
+                List<Map<String, String>> events = eventService.getEventsInDateRange(calendarContext.getCalendarId(), start, end);
+
+                return events.isEmpty()
+                        ? eventResponseBuilder.buildNoEventsFound(start, end)
+                        : eventResponseBuilder.buildEventList(events, calendarContext.getCalendarId());
+
+            } catch (Exception e) {
+                return buildAiMessage("❌ Failed to fetch events: " + e.getMessage());
+            }
+        }
+
+        // Step 5: Create state
+        PendingEventState state = new PendingEventState();
+        state.setIntent(intentStr);
+        state.setSummary(json.path("summary").asText(""));
+        state.setStart(json.path("start").asText(""));
+        state.setEnd(json.path("end").asText(""));
+        state.setLocation(json.path("location").asText(""));
+        state.setDescription(json.path("description").asText(""));
+
+        if (previousState != null) {
+            state.mergeFrom(previousState);
+        }
+
+        // Step 6: Missing info?
+        if (!state.isComplete()) {
+            pendingEvents.put(userId, state);
+            return buildAiMessage(clarificationService.buildClarificationMessage(state));
+        }
+
+        // Step 7: Create event
+        pendingEvents.remove(userId);
+        Event event = eventParser.parseFromJson(json);
+
+        try {
+            Map<String, String> created = eventService.createEvent(calendarContext.getCalendarId(), event);
+            return eventResponseBuilder.buildEventCardResponse(event, created);
+        } catch (IOException e) {
+            return buildAiMessage("❌ Failed to create the event: " + e.getMessage());
+        }
     }
 
     private IntentType mapIntentType(String extractedIntent) {
@@ -93,89 +150,6 @@ public class ConversationService {
         };
     }
 
-    private String handleIntentPreview(IntentType intent, JsonNode jsonNode) throws Exception {
-        return new ObjectMapper().writeValueAsString(List.of(
-                Map.of("role", "ai", "content", "Detected Intent: " + intent + "\n\nDetails:\n" + jsonNode.toPrettyString())
-        ));
-    }
-
-    private String handleViewEvents(JsonNode jsonNode) throws Exception {
-        String start = jsonNode.get("start").asText();
-        String end = jsonNode.get("end").asText();
-        String calendarId = calendarContext.getCalendarId();
-
-        List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, start, end);
-
-        if (events.isEmpty()) {
-            return new ObjectMapper().writeValueAsString(List.of(
-                    Map.of("role", "ai", "content", "📭 No events found between " + start + " and " + end + ".")
-            ));
-        }
-
-        List<Map<String, String>> responseList = new ArrayList<>();
-
-        // 📅 Date range header
-        String title = start.equals(end)
-                ? "📅 Events for " + formatDisplayDate(start)
-                : "📅 Events from " + formatDisplayDate(start) + " to " + formatDisplayDate(end);
-
-        responseList.add(Map.of("role", "ai", "content", title));
-
-        for (Map<String, String> event : events) {
-            responseList.add(Map.of(
-                    "role", "event",
-                    "summary", event.get("summary"),
-                    "date", event.get("start").split(" ")[0],
-                    "time", event.get("start").split(" ")[1] + " - " + event.get("end").split(" ")[1],
-                    "location", event.getOrDefault("location", "No location"),
-                    "calendarId", calendarId,
-                    "id", event.get("id"),
-                    "guests", event.getOrDefault("guests", "")
-            ));
-        }
-
-        return new ObjectMapper().writeValueAsString(responseList);
-    }
-
-    private String handleCreateEvent(JsonNode jsonNode) throws Exception {
-        Event event = parseEventDetails(jsonNode);
-        String calendarId = calendarContext.getCalendarId();
-        Map<String, String> createdEvent = eventService.createEvent(calendarId, event);
-
-        return new ObjectMapper().writeValueAsString(List.of(Map.of(
-                "role", "event",
-                "summary", createdEvent.get("summary"),
-                "date", createdEvent.get("start").split(" ")[0],
-                "time", createdEvent.get("start").split(" ")[1] + " - " + createdEvent.get("end").split(" ")[1],
-                "calendarId", calendarId,
-                "id", createdEvent.get("id"),
-                "guests", createdEvent.getOrDefault("guests", "")
-        )));
-    }
-
-    private Event parseEventDetails(JsonNode jsonNode) {
-        try {
-            Event event = new Event();
-            event.setSummary(jsonNode.get("summary").asText("No Title"));
-            event.setDescription(jsonNode.get("description").asText(""));
-            event.setLocation(jsonNode.get("location").asText(""));
-            event.setStart(LocalDateTime.parse(jsonNode.get("start").asText(), ISO_FORMATTER));
-            event.setEnd(LocalDateTime.parse(jsonNode.get("end").asText(), ISO_FORMATTER));
-            event.setTimeZone(ZoneId.systemDefault().toString());
-            return event;
-        } catch (Exception e) {
-            e.printStackTrace();
-            Event fallback = new Event();
-            fallback.setSummary("Default Event");
-            fallback.setDescription("No Description");
-            fallback.setLocation("No Location");
-            fallback.setStart(LocalDateTime.now());
-            fallback.setEnd(LocalDateTime.now().plusHours(1));
-            fallback.setTimeZone(ZoneId.systemDefault().toString());
-            return fallback;
-        }
-    }
-
     private String buildAiMessage(String content) {
         try {
             return new ObjectMapper().writeValueAsString(List.of(
@@ -183,24 +157,6 @@ public class ConversationService {
             ));
         } catch (Exception e) {
             return "[{\"role\":\"ai\",\"content\":\"Error generating reply\"}]";
-        }
-    }
-
-    private String buildErrorResponse(String errorMsg) {
-        try {
-            return new ObjectMapper().writeValueAsString(List.of(
-                    Map.of("role", "ai", "content", errorMsg)
-            ));
-        } catch (Exception e) {
-            return "[{\"role\":\"ai\",\"content\":\"Unexpected fatal error\"}]";
-        }
-    }
-
-    private String formatDisplayDate(String isoDateTime) {
-        try {
-            return LocalDate.parse(isoDateTime.substring(0, 10)).format(DateTimeFormatter.ofPattern("dd MMMM yyyy"));
-        } catch (Exception e) {
-            return isoDateTime;
         }
     }
 }

@@ -31,19 +31,36 @@ public class IntentService {
     }
 
     public String extractDetailsFromPrompt(String prompt) {
-        String extractionPrompt = "Analyze the following text and determine if it represents an event-related request (Create, Edit, Delete, View). " +
-                "If it is event-related, return structured JSON with fields: " +
-                "\"intent\" (CREATE, EDIT, DELETE, VIEW), \"summary\", \"description\", \"start\", \"end\", \"location\". " +
-                "Ensure \"start\" and \"end\" are in ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSZ). " +
-                "If \"end\" is not provided, set it to 1 hour after \"start\". " +
-                "However, if the intent is to view events and no specific time range is provided, assume the full day (from 00:00:00.000 to 23:59:59.999) for that date. " +
-                "Consider that today's date is " + today + ", tomorrow's date is " + tomorrow + ", and one week from today is " + nextWeek + ". " +
-                "If the provided \"start\" date does not include a year, determine whether that date is still upcoming in the current year; if it is, use the current year, otherwise schedule it for next year. " +
-                "If the provided \"start\" date includes a year but is in the past relative to today's date, adjust it to the next valid occurrence by adding one year. " +
-                "IMPORTANT: If the request is about writing a song, composing lyrics, generating a poem, writing a story, or anything that is NOT an event, return {\"intent\": \"NONE\", \"message\": \"response text\"} instead of classifying it as an event. " +
-                "If the intent is NOT event-related, return a simple JSON object: {\"intent\": \"NONE\", \"message\": \"response text\"}. " +
-                "Do NOT wrap the response in markdown code blocks or triple backticks (`). " +
-                "Text: \"" + prompt + "\"";
+        LocalDate today = LocalDate.now();
+        LocalDate tomorrow = today.plusDays(1);
+        LocalDate nextWeek = today.plusWeeks(1);
+
+        String extractionPrompt =
+                "Analyze the following text and determine if it represents an event-related request (Create, Edit, Delete, View). " +
+                        "If it is event-related, return a structured JSON object with the following fields: " +
+                        "\"intent\" (CREATE, EDIT, DELETE, VIEW), " +
+                        "\"summary\", \"description\", \"start\", \"end\", \"location\". " +
+
+                        // Format enforcement
+                        "Ensure both \"start\" and \"end\" are in full ISO 8601 format with milliseconds and Z (e.g., 2025-04-09T15:00:00.000Z). " +
+
+                        // ⚠️ Main Rule: only default when start is present
+                        "IMPORTANT: For ALL intents, if \"start\" is provided but \"end\" is missing, set \"end\" to 1 hour after \"start\". " +
+                        "If \"start\" is not provided at all, leave both \"start\" and \"end\" as empty strings (\"\"). " +
+                        "Do NOT assume a full day or any default times based on the intent. " +
+
+                        // 🗓️ Natural date handling
+                        "Use these time references when interpreting phrases: today = " + today + ", tomorrow = " + tomorrow + ", next week = " + nextWeek + ". " +
+                        "If a date does not include a year, use the current year if the date is still upcoming, otherwise use the next year. " +
+                        "If a date includes a past year, adjust it to the next valid future occurrence by adding one year. " +
+
+                        // 🧠 Not an event? Return NONE
+                        "If the request is not related to an event (e.g., a song, story, poem), return {\"intent\": \"NONE\", \"message\": \"response text\"}. " +
+
+                        // ✅ Output
+                        "Respond only with raw JSON — no markdown, no extra text, and no formatting. " +
+                        "Text: \"" + prompt + "\"";
+
 
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(new ChatMessage("system", extractionPrompt));
@@ -63,4 +80,5 @@ public class IntentService {
         }
         return jsonNode.toString();
     }
+
 }
