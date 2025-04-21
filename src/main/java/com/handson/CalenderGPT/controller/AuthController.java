@@ -5,11 +5,13 @@ import com.handson.CalenderGPT.model.UserSession;
 import com.handson.CalenderGPT.repository.UserSessionRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpSession;
 import java.util.*;
 
 @RestController
@@ -31,15 +33,11 @@ public class AuthController {
     }
 
     @GetMapping("/api/me")
-    public ResponseEntity<Map<String, Object>> getCurrentUser(HttpSession session) {
-        String sessionId = session.getId();
-        Optional<UserSession> sessionOpt = userSessionRepository.findBySessionId(sessionId);
-
-        if (sessionOpt.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Session not found"));
+    public ResponseEntity<Map<String, Object>> getCurrentUser(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof User user)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        User user = sessionOpt.get().getUser();
         Map<String, Object> response = new HashMap<>();
         response.put("id", user.getId());
         response.put("email", user.getEmail());
@@ -48,6 +46,7 @@ public class AuthController {
 
         return ResponseEntity.ok(response);
     }
+
 
     @GetMapping("/logout")
     public String logout(HttpSession session) {

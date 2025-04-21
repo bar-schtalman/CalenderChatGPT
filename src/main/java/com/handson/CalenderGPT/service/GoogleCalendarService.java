@@ -3,81 +3,81 @@ package com.handson.CalenderGPT.service;
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.CalendarList;
 import com.google.api.services.calendar.model.CalendarListEntry;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.handson.CalenderGPT.context.CalendarContext;
+import com.handson.CalenderGPT.provider.GoogleCalendarProvider;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.security.GeneralSecurityException;
+import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class GoogleCalendarService {
 
-    private Calendar googleCalendarClient;
+    private final GoogleCalendarProvider calendarProvider;
+    private final CalendarContext calendarContext;
+    private static final Logger logger = LoggerFactory.getLogger(GoogleCalendarService.class);
 
-    @Autowired
-    public GoogleCalendarService(Calendar googleCalendarClient) {
-        this.googleCalendarClient = googleCalendarClient;
+    public GoogleCalendarService(GoogleCalendarProvider calendarProvider, CalendarContext calendarContext) {
+        this.calendarProvider = calendarProvider;
+        this.calendarContext = calendarContext;
     }
 
-    public void setCalendar(Calendar calendar) {
-        this.googleCalendarClient = calendar;
+    // This function now correctly uses OAuth2AuthorizedClient.
+    private Calendar getCalendarClient() throws GeneralSecurityException, IOException {
+        OAuth2AuthorizedClient client = calendarContext.getAuthorizedClient();
+        if (client == null) {
+            logger.error("OAuth2AuthorizedClient is null. User is not authenticated with Google.");
+            throw new IllegalStateException("User is not authenticated with Google.");
+        }
+
+        // Logging the client access token for debugging purposes
+        logger.info("OAuth2AuthorizedClient found. Access token: {}", client.getAccessToken().getTokenValue());
+
+        return calendarProvider.getCalendarClient(client);
     }
 
-    /**
-     * Fetches the list of all calendars for the authenticated user with details.
-     *
-     * @return List of calendar details (name, id, primary status).
-     * @throws IOException If the API call fails.
-     */
-    public List<Map<String, Object>> getCalendars() throws IOException {
+    public List<Map<String, Object>> getCalendars() throws IOException, GeneralSecurityException {
         List<Map<String, Object>> calendarDetails = new ArrayList<>();
 
-        // Fetch the list of calendars
-        CalendarList calendarList = googleCalendarClient.calendarList().list().execute();
+        // Ensure that OAuth2AuthorizedClient is used correctly
+        CalendarList calendarList = getCalendarClient().calendarList().list().execute();
 
-        // Iterate through the calendars and collect their details
         for (CalendarListEntry entry : calendarList.getItems()) {
             Map<String, Object> calendarInfo = new HashMap<>();
             calendarInfo.put("name", entry.getSummary());
             calendarInfo.put("id", entry.getId());
             calendarInfo.put("primary", Boolean.TRUE.equals(entry.getPrimary()));
-
             calendarDetails.add(calendarInfo);
         }
 
         return calendarDetails;
     }
 
-    /**
-     * Fetch a calendar by its ID.
-     */
-    public CalendarListEntry getCalendarById(String calendarId) throws IOException {
-        return googleCalendarClient.calendarList().get(calendarId).execute();
+    public CalendarListEntry getCalendarById(String calendarId) throws IOException, GeneralSecurityException {
+        return getCalendarClient().calendarList().get(calendarId).execute();
     }
 
-    /**
-     * Delete a calendar by its ID.
-     */
-    public void deleteCalendar(String calendarId) throws IOException {
-        googleCalendarClient.calendarList().delete(calendarId).execute();
+    public void deleteCalendar(String calendarId) throws IOException, GeneralSecurityException {
+        getCalendarClient().calendarList().delete(calendarId).execute();
     }
 
-    /**
-     * Create a new calendar.
-     */
-    public String createCalendar(String summary) throws IOException {
-        com.google.api.services.calendar.model.Calendar calendar = new com.google.api.services.calendar.model.Calendar().setSummary(summary).setTimeZone("UTC");
+    public String createCalendar(String summary) throws IOException, GeneralSecurityException {
+        com.google.api.services.calendar.model.Calendar calendar = new com.google.api.services.calendar.model.Calendar()
+                .setSummary(summary)
+                .setTimeZone("UTC");
 
-        com.google.api.services.calendar.model.Calendar createdCalendar = googleCalendarClient.calendars().insert(calendar).execute();
+        com.google.api.services.calendar.model.Calendar createdCalendar = getCalendarClient().calendars().insert(calendar).execute();
 
         return createdCalendar.getId();
     }
 
-    public Map<String, String> getDefaultCalendarDetails() throws IOException {
-        CalendarList calendarList = googleCalendarClient.calendarList().list().execute();
+    public Map<String, String> getDefaultCalendarDetails() throws IOException, GeneralSecurityException {
+        CalendarList calendarList = getCalendarClient().calendarList().list().execute();
+
         for (CalendarListEntry entry : calendarList.getItems()) {
             if (Boolean.TRUE.equals(entry.getPrimary())) {
                 Map<String, String> defaultCalendarDetails = new HashMap<>();
@@ -86,6 +86,7 @@ public class GoogleCalendarService {
                 return defaultCalendarDetails;
             }
         }
+
         throw new IOException("Default calendar not found.");
     }
 }

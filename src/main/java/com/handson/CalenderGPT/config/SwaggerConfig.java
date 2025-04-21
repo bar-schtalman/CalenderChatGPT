@@ -1,65 +1,57 @@
 package com.handson.CalenderGPT.config;
 
+import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.security.OAuthFlow;
+import io.swagger.v3.oas.models.security.OAuthFlows;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import springfox.documentation.builders.PathSelectors;
-import springfox.documentation.builders.RequestHandlerSelectors;
-import springfox.documentation.service.AuthorizationScope;
-import springfox.documentation.service.SecurityReference;
-import springfox.documentation.service.SecurityScheme;
-import springfox.documentation.spi.DocumentationType;
-import springfox.documentation.spi.service.contexts.SecurityContext;
-import springfox.documentation.spring.web.plugins.Docket;
-import springfox.documentation.swagger2.annotations.EnableSwagger2;
 
-import java.util.Collections;
-import java.util.List;
+import java.util.Map;
 
 @Configuration
-@EnableSwagger2
 public class SwaggerConfig {
 
+    @Value("${spring.security.oauth2.client.registration.google.client-id}")
+    private String clientId;
 
     @Value("${spring.security.oauth2.client.registration.google.client-secret}")
     private String clientSecret;
 
-    @Value("${spring.security.oauth2.client.registration.google.client-id}")
-    private String clientID;
-
     @Bean
-    public Docket api() {
-        return new Docket(DocumentationType.SWAGGER_2)
-                .select()
-                .apis(RequestHandlerSelectors.basePackage("com.handson.CalenderGPT.controller"))
-                .paths(PathSelectors.any()) // Include all paths
-                .build()
-                .securitySchemes(Collections.singletonList(oauthSecurityScheme())) // Define OAuth2 scheme
-                .securityContexts(Collections.singletonList(securityContext())); // Apply security context to endpoints
-    }
+    public OpenAPI customOpenAPI() {
+        return new OpenAPI()
+                .info(new Info()
+                        .title("CalendarGPT API")
+                        .version("1.0")
+                        .description("API docs for CalendarGPT with Google OAuth and OpenAI")
+                        .contact(new Contact().name("Your Name").email("your@email.com"))
+                )
+                .addSecurityItem(new SecurityRequirement().addList("oauth2"))
+                .components(new Components()
+                        .addSecuritySchemes("oauth2",
+                                new SecurityScheme()
+                                        .type(SecurityScheme.Type.OAUTH2)
+                                        .flows(new OAuthFlows()
+                                                .authorizationCode(new OAuthFlow()
+                                                        .authorizationUrl("https://accounts.google.com/o/oauth2/auth")
+                                                        .tokenUrl("https://oauth2.googleapis.com/token")
+                                                        .scopes(new io.swagger.v3.oas.models.security.Scopes()
+                                                                .addString("openid", "Access your identity")
+                                                                .addString("profile", "Access your basic profile")
+                                                                .addString("email", "Access your email")
+                                                                .addString("https://www.googleapis.com/auth/calendar", "Access Google Calendar")
+                                                                .addString("https://www.googleapis.com/auth/contacts.readonly", "Read your Google Contacts")
+                                                        )
+                                                )
+                                        )
 
-    private SecurityScheme oauthSecurityScheme() {
-        return new springfox.documentation.builders.OAuthBuilder()
-                .name("oauth2")
-                .grantTypes(Collections.singletonList(
-                        new springfox.documentation.service.AuthorizationCodeGrant(
-                                new springfox.documentation.service.TokenRequestEndpoint(
-                                        "https://accounts.google.com/o/oauth2/auth",
-                                        clientID,
-                                        clientSecret),
-                                new springfox.documentation.service.TokenEndpoint(
-                                        "https://oauth2.googleapis.com/token", "access_token"))))
-                .build();
-    }
-
-    private SecurityContext securityContext() {
-        return SecurityContext.builder()
-                .securityReferences(defaultAuth())
-                .forPaths(PathSelectors.regex("/calendar/.*")) // Apply OAuth2 only to calendar endpoints
-                .build();
-    }
-
-    private List<SecurityReference> defaultAuth() {
-        return Collections.singletonList(new SecurityReference("oauth2", new AuthorizationScope[]{}));
+                        )
+                );
     }
 }

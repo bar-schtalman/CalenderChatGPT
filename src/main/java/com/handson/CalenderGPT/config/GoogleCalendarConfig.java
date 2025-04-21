@@ -28,27 +28,25 @@ public class GoogleCalendarConfig {
     public Calendar googleCalendarClient() throws GeneralSecurityException, IOException {
         var auth = SecurityContextHolder.getContext().getAuthentication();
 
-        if (!(auth instanceof OAuth2AuthenticationToken)) {
+        if (auth instanceof OAuth2AuthenticationToken oauthToken) {
+            OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId("google")
+                    .principal(oauthToken)
+                    .build();
+
+            OAuth2AuthorizedClient client = authorizedClientManager.authorize(authorizeRequest);
+
+            if (client == null || client.getAccessToken() == null) {
+                throw new IllegalStateException("Unable to obtain access token");
+            }
+
+            return new Calendar.Builder(
+                    GoogleNetHttpTransport.newTrustedTransport(),
+                    JSON_FACTORY,
+                    request -> request.getHeaders()
+                            .setAuthorization("Bearer " + client.getAccessToken().getTokenValue())
+            ).setApplicationName("CalendarGPT").build();
+        } else {
             throw new IllegalStateException("Not authenticated with Google");
         }
-
-        OAuth2AuthenticationToken authentication = (OAuth2AuthenticationToken) auth;
-
-        OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId("google")
-                .principal(authentication)
-                .build();
-
-        OAuth2AuthorizedClient client = authorizedClientManager.authorize(authorizeRequest);
-
-        if (client == null || client.getAccessToken() == null) {
-            throw new IllegalStateException("Unable to obtain access token");
-        }
-
-        return new Calendar.Builder(
-                GoogleNetHttpTransport.newTrustedTransport(),
-                JSON_FACTORY,
-                request -> request.getHeaders()
-                        .setAuthorization("Bearer " + client.getAccessToken().getTokenValue())
-        ).setApplicationName("CalendarGPT").build();
     }
 }

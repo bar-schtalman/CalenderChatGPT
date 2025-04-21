@@ -4,10 +4,13 @@ import com.google.api.client.util.DateTime;
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.*;
 import com.handson.CalenderGPT.model.Event;
+import com.handson.CalenderGPT.model.User;
+import com.handson.CalenderGPT.provider.GoogleCalendarProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -16,18 +19,72 @@ import java.util.stream.Collectors;
 @Service
 public class EventService {
 
-    private Calendar googleCalendarClient;
+    private final GoogleCalendarProvider googleCalendarProvider;
 
     @Autowired
-    public EventService(Calendar googleCalendarClient) {
-        this.googleCalendarClient = googleCalendarClient;
+    public EventService(GoogleCalendarProvider googleCalendarProvider) {
+        this.googleCalendarProvider = googleCalendarProvider;
     }
 
-    public void setCalendar(Calendar calendar) {
-        this.googleCalendarClient = calendar;
+    // Create Event using JWT-authenticated User
+    public Map<String, String> createEvent(String calendarId, Event eventRequest, User user) throws IOException, GeneralSecurityException {
+        Calendar googleCalendarClient = googleCalendarProvider.getCalendarClient(user);
+        return createEventInternal(calendarId, eventRequest, googleCalendarClient);
     }
 
-    public Map<String, String> createEvent(String calendarId, Event eventRequest) throws IOException {
+    // Update Event using JWT-authenticated User
+    public String updateEvent(String calendarId, String eventId, Event eventRequest, User user) throws IOException, GeneralSecurityException {
+        Calendar googleCalendarClient = googleCalendarProvider.getCalendarClient(user);
+        com.google.api.services.calendar.model.Event existingEvent =
+                googleCalendarClient.events().get(calendarId, eventId).execute();
+
+        existingEvent.setSummary(eventRequest.getSummary());
+        existingEvent.setLocation(eventRequest.getLocation());
+        existingEvent.setDescription(eventRequest.getDescription());
+        existingEvent.setStart(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getStart(), eventRequest.getTimeZone())));
+        existingEvent.setEnd(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getEnd(), eventRequest.getTimeZone())));
+
+        if (eventRequest.getGuests() != null && !eventRequest.getGuests().isEmpty()) {
+            List<EventAttendee> attendees = eventRequest.getGuests().stream()
+                    .map(email -> new EventAttendee().setEmail(email))
+                    .collect(Collectors.toList());
+            existingEvent.setAttendees(attendees);
+        }
+
+        return googleCalendarClient.events().update(calendarId, eventId, existingEvent).execute().getHtmlLink();
+    }
+
+    // Fetch Events in a Date Range using JWT-authenticated User
+    public List<Map<String, String>> getEventsInDateRange(String calendarId, String startDate, String endDate, User user) throws IOException, GeneralSecurityException {
+        Calendar googleCalendarClient = googleCalendarProvider.getCalendarClient(user);
+        Events events = googleCalendarClient.events().list(calendarId)
+                .setTimeMin(new DateTime(startDate))
+                .setTimeMax(new DateTime(endDate))
+                .setOrderBy("startTime")
+                .setSingleEvents(true)
+                .setFields("items(id,summary,start,end,location,description,attendees)")
+                .execute();
+
+        return events.getItems().stream().map(this::mapEvent).collect(Collectors.toList());
+    }
+
+    // Fetch an Event by ID using JWT-authenticated User
+    public Map<String, String> getEventById(String calendarId, String eventId, User user) throws IOException, GeneralSecurityException {
+        Calendar googleCalendarClient = googleCalendarProvider.getCalendarClient(user);
+        com.google.api.services.calendar.model.Event event =
+                googleCalendarClient.events().get(calendarId, eventId).execute();
+
+        return mapEvent(event);
+    }
+
+    // Delete an Event using JWT-authenticated User
+    public void deleteEvent(String calendarId, String eventId, User user) throws IOException, GeneralSecurityException {
+        Calendar googleCalendarClient = googleCalendarProvider.getCalendarClient(user);
+        googleCalendarClient.events().delete(calendarId, eventId).execute();
+    }
+
+    // Internal method to handle event creation logic (no changes)
+    private Map<String, String> createEventInternal(String calendarId, Event eventRequest, Calendar googleCalendarClient) throws IOException {
         DateTime startDateTime = convertToGoogleDateTime(eventRequest.getStart(), eventRequest.getTimeZone());
         DateTime endDateTime = convertToGoogleDateTime(eventRequest.getEnd(), eventRequest.getTimeZone());
 
@@ -39,9 +96,8 @@ public class EventService {
         googleEvent.setStart(new EventDateTime().setDateTime(startDateTime).setTimeZone(eventRequest.getTimeZone()));
         googleEvent.setEnd(new EventDateTime().setDateTime(endDateTime).setTimeZone(eventRequest.getTimeZone()));
 
-        List<String> guestEmails = eventRequest.getGuests();
-        if (guestEmails != null && !guestEmails.isEmpty()) {
-            List<EventAttendee> attendees = guestEmails.stream()
+        if (eventRequest.getGuests() != null && !eventRequest.getGuests().isEmpty()) {
+            List<EventAttendee> attendees = eventRequest.getGuests().stream()
                     .map(email -> new EventAttendee().setEmail(email))
                     .collect(Collectors.toList());
             googleEvent.setAttendees(attendees);
@@ -52,58 +108,6 @@ public class EventService {
                 .execute();
 
         return mapEvent(created);
-    }
-
-    public String updateEvent(String calendarId, String eventId, Event eventRequest) throws IOException {
-        com.google.api.services.calendar.model.Event existingEvent =
-                googleCalendarClient.events().get(calendarId, eventId).execute();
-
-        existingEvent.setSummary(eventRequest.getSummary());
-        existingEvent.setLocation(eventRequest.getLocation());
-        existingEvent.setDescription(eventRequest.getDescription());
-        existingEvent.setStart(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getStart(), eventRequest.getTimeZone())).setTimeZone(eventRequest.getTimeZone()));
-        existingEvent.setEnd(new EventDateTime().setDateTime(convertToGoogleDateTime(eventRequest.getEnd(), eventRequest.getTimeZone())).setTimeZone(eventRequest.getTimeZone()));
-
-        List<String> guestEmails = eventRequest.getGuests();
-        if (guestEmails != null && !guestEmails.isEmpty()) {
-            List<EventAttendee> attendees = guestEmails.stream()
-                    .map(email -> new EventAttendee().setEmail(email))
-                    .collect(Collectors.toList());
-            existingEvent.setAttendees(attendees);
-        }
-
-        return googleCalendarClient.events().update(calendarId, eventId, existingEvent).execute().getHtmlLink();
-    }
-
-    public List<Map<String, String>> getEventsInDateRange(String calendarId, String startDate, String endDate) throws IOException {
-        DateTime timeMin = new DateTime(startDate);
-        DateTime timeMax = new DateTime(endDate);
-
-        Events events = googleCalendarClient.events().list(calendarId)
-                .setTimeMin(timeMin)
-                .setTimeMax(timeMax)
-                .setOrderBy("startTime")
-                .setSingleEvents(true)
-                .setFields("items(id,summary,start,end,location,description,attendees)")
-                .execute();
-
-        List<Map<String, String>> simplifiedEvents = new ArrayList<>();
-        for (com.google.api.services.calendar.model.Event event : events.getItems()) {
-            simplifiedEvents.add(mapEvent(event));
-        }
-
-        return simplifiedEvents;
-    }
-
-    public Map<String, String> getEventById(String calendarId, String eventId) throws IOException {
-        com.google.api.services.calendar.model.Event event =
-                googleCalendarClient.events().get(calendarId, eventId).execute();
-
-        return mapEvent(event);
-    }
-
-    public void deleteEvent(String calendarId, String eventId) throws IOException {
-        googleCalendarClient.events().delete(calendarId, eventId).execute();
     }
 
     private DateTime convertToGoogleDateTime(LocalDateTime localDateTime, String timeZone) {
@@ -133,7 +137,6 @@ public class EventService {
         map.put("location", Optional.ofNullable(event.getLocation()).orElse(""));
         map.put("description", Optional.ofNullable(event.getDescription()).orElse(""));
 
-        // Date/time logic with fallback support
         EventDateTime startDt = event.getStart();
         EventDateTime endDt = event.getEnd();
 
@@ -156,54 +159,50 @@ public class EventService {
         map.put("end", formatDate(endDt));
 
         if (event.getAttendees() != null) {
-            List<String> guestEmails = event.getAttendees().stream()
+            String guests = event.getAttendees().stream()
                     .map(EventAttendee::getEmail)
-                    .filter(email -> email != null && !email.trim().isEmpty())
-                    .collect(Collectors.toList());
-
-            if (!guestEmails.isEmpty()) {
-                map.put("guests", String.join(",", guestEmails));
-            }
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.joining(","));
+            map.put("guests", guests);
         }
 
         return map;
     }
 
-    public Map<String, String> addGuests(String calendarId, String eventId, List<String> newGuests) throws IOException {
-        com.google.api.services.calendar.model.Event event =
-                googleCalendarClient.events().get(calendarId, eventId).execute();
+    // Add guests to an existing event
+    public Map<String, String> addGuests(String calendarId, String eventId, List<String> guests, User user) throws IOException, GeneralSecurityException {
+        Calendar calendar = googleCalendarProvider.getCalendarClient(user);
+        com.google.api.services.calendar.model.Event event = calendar.events().get(calendarId, eventId).execute();
 
-        List<EventAttendee> attendees = event.getAttendees() != null ? new ArrayList<>(event.getAttendees()) : new ArrayList<>();
+        List<EventAttendee> existingAttendees = Optional.ofNullable(event.getAttendees()).orElse(new ArrayList<>());
+        Set<String> existingEmails = existingAttendees.stream()
+                .map(EventAttendee::getEmail)
+                .collect(Collectors.toSet());
 
-        for (String guest : newGuests) {
-            if (attendees.stream().noneMatch(a -> a.getEmail().equalsIgnoreCase(guest))) {
-                attendees.add(new EventAttendee().setEmail(guest));
+        for (String email : guests) {
+            if (!existingEmails.contains(email)) {
+                existingAttendees.add(new EventAttendee().setEmail(email));
             }
         }
 
-        event.setAttendees(attendees);
-        com.google.api.services.calendar.model.Event updatedEvent =
-                googleCalendarClient.events().update(calendarId, eventId, event).execute();
-
+        event.setAttendees(existingAttendees);
+        com.google.api.services.calendar.model.Event updatedEvent = calendar.events().update(calendarId, eventId, event).execute();
         return mapEvent(updatedEvent);
     }
 
-    public Map<String, String> removeGuests(String calendarId, String eventId, List<String> guestsToRemove) throws IOException {
-        com.google.api.services.calendar.model.Event event = googleCalendarClient.events()
-                .get(calendarId, eventId).execute();
+    // Remove guests from an existing event
+    public Map<String, String> removeGuests(String calendarId, String eventId, List<String> emailsToRemove, User user) throws IOException, GeneralSecurityException {
+        Calendar calendar = googleCalendarProvider.getCalendarClient(user);
+        com.google.api.services.calendar.model.Event event = calendar.events().get(calendarId, eventId).execute();
 
-        if (event.getAttendees() == null) return mapEvent(event);
-
-        List<EventAttendee> updatedAttendees = event.getAttendees().stream()
-                .filter(attendee -> !guestsToRemove.contains(attendee.getEmail()))
+        List<EventAttendee> updatedAttendees = Optional.ofNullable(event.getAttendees()).orElse(new ArrayList<>())
+                .stream()
+                .filter(attendee -> !emailsToRemove.contains(attendee.getEmail()))
                 .collect(Collectors.toList());
 
         event.setAttendees(updatedAttendees);
-
-        com.google.api.services.calendar.model.Event updated = googleCalendarClient.events()
-                .update(calendarId, eventId, event).execute();
-
-        return mapEvent(updated);
+        com.google.api.services.calendar.model.Event updatedEvent = calendar.events().update(calendarId, eventId, event).execute();
+        return mapEvent(updatedEvent);
     }
 
 }

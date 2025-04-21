@@ -4,11 +4,12 @@ import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.CalendarList;
 import com.google.api.services.calendar.model.CalendarListEntry;
 import com.handson.CalenderGPT.context.CalendarContext;
+import com.handson.CalenderGPT.jwt.JwtTokenUtil;
 import com.handson.CalenderGPT.model.User;
-import com.handson.CalenderGPT.model.UserSession;
 import com.handson.CalenderGPT.provider.GoogleCalendarProvider;
 import com.handson.CalenderGPT.repository.UserRepository;
-import com.handson.CalenderGPT.repository.UserSessionRepository;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
@@ -18,12 +19,9 @@ import org.springframework.security.oauth2.client.authentication.OAuth2Authentic
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Map;
-
 
 @Component
 public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
@@ -32,81 +30,91 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
 
     private final OAuth2AuthorizedClientService clientService;
     private final GoogleCalendarProvider calendarProvider;
-    private final CalendarContext calendarContext;
     private final UserRepository userRepository;
-    private final UserSessionRepository userSessionRepository;
+    private final JwtTokenUtil jwtTokenUtil;
+    private final CalendarContext calendarContext;
 
     public GoogleOAuthSuccessHandler(
             OAuth2AuthorizedClientService clientService,
             GoogleCalendarProvider calendarProvider,
-            CalendarContext calendarContext,
             UserRepository userRepository,
-            UserSessionRepository userSessionRepository
+            JwtTokenUtil jwtTokenUtil,
+            CalendarContext calendarContext
     ) {
         this.clientService = clientService;
         this.calendarProvider = calendarProvider;
-        this.calendarContext = calendarContext;
         this.userRepository = userRepository;
-        this.userSessionRepository = userSessionRepository;
+        this.jwtTokenUtil = jwtTokenUtil;
+        this.calendarContext = calendarContext;
     }
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                         Authentication authentication) throws IOException {
-        if (authentication instanceof OAuth2AuthenticationToken oauthToken) {
-            log.info("✅ Google OAuth2 authentication successful");
-
-            OAuth2AuthorizedClient client = clientService.loadAuthorizedClient(
-                    oauthToken.getAuthorizedClientRegistrationId(),
-                    oauthToken.getName()
-            );
-            calendarContext.setAuthorizedClient(client);
-            log.info("✅ Stored OAuth2AuthorizedClient in CalendarContext");
-
-
-            Map<String, Object> attributes = oauthToken.getPrincipal().getAttributes();
-            String email = (String) attributes.get("email");
-            String fullName = (String) attributes.get("name");
-            String firstName = (String) attributes.get("given_name");
-            String lastName = (String) attributes.get("family_name");
-
-            // Find or create user
-            User user = userRepository.findByEmail(email).orElseGet(() -> {
-                log.info("🆕 New user detected. Creating user: {}", email);
-                User newUser = new User();
-                newUser.setEmail(email);
-                newUser.setFirstName(firstName != null ? firstName : fullName);
-                newUser.setLastName(lastName != null ? lastName : "");
-                return userRepository.saveAndFlush(newUser);  // Save and flush to ensure user is managed
-            });
-
-            // Create new session
-            String sessionId = request.getSession().getId();
-            UserSession userSession = new UserSession();
-            userSession.setUser(user);  // Assign existing User entity
-            userSession.setSessionId(sessionId);
-            userSession.setLoginTime(LocalDateTime.now());
-
-            userSessionRepository.save(userSession);  // Save session
-            log.info("📌 Stored new session: {} for user {}", sessionId, email);
-
-            // Fetch and store calendar ID
-            try {
-                Calendar calendarClient = calendarProvider.getCalendarClient(client);
-                CalendarList list = calendarClient.calendarList().list().execute();
-
-                for (CalendarListEntry entry : list.getItems()) {
-                    if (Boolean.TRUE.equals(entry.getPrimary())) {
-                        calendarContext.setCalendarId(entry.getId());
-                        log.info("✅ Stored calendar ID in session: {}", entry.getId());
-                        break;
-                    }
-                }
-            } catch (Exception e) {
-                log.error("❌ Failed to fetch calendar info", e);
-            }
+        if (!(authentication instanceof OAuth2AuthenticationToken oauthToken)) {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentication failed");
+            return;
         }
 
-        response.sendRedirect("/chat-ui");
+        log.info("✅ Google OAuth2 authentication successful");
+
+        OAuth2AuthorizedClient client = clientService.loadAuthorizedClient(
+                oauthToken.getAuthorizedClientRegistrationId(),
+                oauthToken.getName()
+        );
+
+        if (client == null || client.getAccessToken() == null) {
+            log.error("❌ OAuth2AuthorizedClient not available after login");
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Missing authorized client");
+            return;
+        }
+
+        Map<String, Object> attributes = oauthToken.getPrincipal().getAttributes();
+        String email = (String) attributes.get("email");
+        String fullName = (String) attributes.get("name");
+        String firstName = (String) attributes.getOrDefault("given_name", fullName);
+        String lastName = (String) attributes.getOrDefault("family_name", "");
+
+        User user = userRepository.findByEmail(email).orElseGet(() -> {
+            log.info("🆕 New user detected. Creating user: {}", email);
+            User newUser = new User();
+            newUser.setEmail(email);
+            newUser.setFullName(fullName);
+            newUser.setFirstName(firstName);
+            newUser.setLastName(lastName);
+            return newUser;
+        });
+
+        user.setJwtIssuedAt(Instant.now());
+
+        // Store refresh token if available
+        if (client.getRefreshToken() != null) {
+            user.setGoogleRefreshToken(client.getRefreshToken().getTokenValue());
+            log.info("🔁 Refresh token stored for user: {}", email);
+        } else {
+            log.warn("⚠️ No refresh token returned from Google. Re-consent may be needed.");
+        }
+
+        // Fetch and store default calendar ID
+        try {
+            Calendar calendarClient = calendarProvider.getCalendarClient(client);
+            CalendarList list = calendarClient.calendarList().list().execute();
+
+            for (CalendarListEntry entry : list.getItems()) {
+                if (Boolean.TRUE.equals(entry.getPrimary())) {
+                    user.setDefaultCalendarId(entry.getId());
+                    log.info("✅ Stored primary calendar ID: {}", entry.getId());
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            log.error("❌ Failed to fetch default calendar", e);
+        }
+
+        userRepository.save(user);
+        calendarContext.setAuthorizedClient(client); // Session scoped (legacy support if needed)
+
+        String jwt = jwtTokenUtil.generateToken(user.getId(), user.getEmail(), user.getFullName());
+        response.sendRedirect("/chat-ui?token=" + jwt);
     }
 }

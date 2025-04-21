@@ -1,3 +1,9 @@
+// 🔐 Include Authorization header
+function authHeader() {
+  const token = localStorage.getItem("AUTH_TOKEN");
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
 function appendMessage(sender, text) {
   const msgDiv = $("<div></div>").addClass("message " + sender).html(text);
   $("#chatWindow").append(msgDiv).append("<div class='clear'></div>");
@@ -21,6 +27,7 @@ function appendEvent(event) {
       $.ajax({
         url: `/api/events/delete/${event.id}`,
         method: "DELETE",
+        headers: authHeader(),
         success: () => {
           card.html("<div class='event-deleted'>DELETED</div>");
         },
@@ -67,6 +74,7 @@ function refreshEventInUI(event) {
       $.ajax({
         url: `/api/events/delete/${event.id}`,
         method: "DELETE",
+        headers: authHeader(), // 👈 added this for JWT
         success: () => {
           $card.html("<div class='event-deleted'>DELETED</div>");
         },
@@ -82,16 +90,14 @@ function refreshEventInUI(event) {
 
   const guestBtn = $("<button class='guest-event btn btn-info btn-sm'></button>")
     .html("➕")
-    .on("click", () => {
-      console.log("Refreshing and opening guest modal for event:", event.id);
-      openGuestModal(event);
-    });
+    .on("click", () => openGuestModal(event));
 
   const buttons = $("<div class='button-container'></div>").append(editBtn, deleteBtn, guestBtn);
   const guestSection = renderGuestSection(event);
 
   $card.empty().append(summary, dateRow, buttons, guestSection);
 }
+
 
 // Make appendEvent globally accessible as renderEventCard
 window.renderEventCard = appendEvent;

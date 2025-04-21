@@ -1,3 +1,9 @@
+// 🔐 Auth helper
+function authHeader() {
+  const token = localStorage.getItem("AUTH_TOKEN");
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
 let currentEventForGuest = null;
 
 function openGuestModal(event) {
@@ -25,6 +31,7 @@ $('#saveGuestsBtn').on('click', () => {
   $.ajax({
     url: `/api/events/${currentEventForGuest.id}/guests`,
     method: "PUT",
+    headers: authHeader(),
     contentType: "application/json",
     data: JSON.stringify(guestEmails),
     success: function (updatedEvent) {
@@ -47,6 +54,7 @@ $(document).on("click", ".remove-guest-btn", function () {
   $.ajax({
     url: `/api/events/${eventId}/guests/remove`,
     method: "PUT",
+    headers: authHeader(),
     contentType: "application/json",
     data: JSON.stringify([email]),
     success: function (updatedEvent) {
@@ -82,6 +90,7 @@ $(document).ready(function () {
         $.ajax({
           url: "/api/contacts/search",
           dataType: "json",
+          headers: authHeader(),
           data: { query: term },
           success: function (data) {
             console.log("📨 Contacts data returned from server:", data);

@@ -13,8 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.*;
 
 @Service
@@ -22,7 +20,6 @@ public class ConversationService {
 
     private final IntentService intentService;
     private final EventService eventService;
-    private final CalendarContext calendarContext;
     private final ChatGPTService chatGPTService;
     private final UserMessageRepository messageRepository;
     private final UserRepository userRepository;
@@ -30,11 +27,11 @@ public class ConversationService {
     private final ClarificationService clarificationService;
     private final EventResponseBuilder eventResponseBuilder;
     private final EventParser eventParser;
+
     private final Map<UUID, PendingEventState> pendingEvents = new HashMap<>();
 
     public ConversationService(IntentService intentService,
                                EventService eventService,
-                               CalendarContext calendarContext,
                                ChatGPTService chatGPTService,
                                UserMessageRepository messageRepository,
                                UserRepository userRepository,
@@ -44,7 +41,6 @@ public class ConversationService {
                                EventParser eventParser) {
         this.intentService = intentService;
         this.eventService = eventService;
-        this.calendarContext = calendarContext;
         this.chatGPTService = chatGPTService;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
@@ -55,18 +51,13 @@ public class ConversationService {
     }
 
     @Transactional
-    public String handlePrompt(String prompt, UUID userId) {
-        User user = userRepository.findById(userId).orElseThrow();
+    public String handlePrompt(String prompt, User user, CalendarContext calendarContext) {
         ChatSession session = getOrCreateLatestSession(user);
         messageRepository.save(new UserMessage(user, session, true, prompt));
 
-        // Step 1: Clarify ongoing prompt
-        PendingEventState previousState = pendingEvents.get(userId);
-        String mergedPrompt = previousState != null
-                ? previousState.getSummary() + " " + prompt
-                : prompt;
+        PendingEventState previousState = pendingEvents.get(user.getId());
+        String mergedPrompt = previousState != null ? previousState.getSummary() + " " + prompt : prompt;
 
-        // Step 2: Extract event intent
         String extractedJson = intentService.extractDetailsFromPrompt(mergedPrompt);
         JsonNode json;
         try {
@@ -87,30 +78,30 @@ public class ConversationService {
             return buildAiMessage(reply);
         }
 
-        // Step 3: Clear if intent changed
         if (previousState != null && !previousState.getIntent().equalsIgnoreCase(intentStr)) {
-            pendingEvents.remove(userId);
+            pendingEvents.remove(user.getId());
             previousState = null;
         }
 
-        // Step 4: Handle VIEW
         IntentType intent = mapIntentType(intentStr);
+        String calendarId = calendarContext.getCalendarId();
+
         if (intent == IntentType.VIEW_EVENTS) {
             try {
                 String start = json.get("start").asText();
                 String end = json.get("end").asText();
-                List<Map<String, String>> events = eventService.getEventsInDateRange(calendarContext.getCalendarId(), start, end);
+                List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, start, end, user);
 
                 return events.isEmpty()
                         ? eventResponseBuilder.buildNoEventsFound(start, end)
-                        : eventResponseBuilder.buildEventList(events, calendarContext.getCalendarId());
+                        : eventResponseBuilder.buildEventList(events, calendarId);
 
             } catch (Exception e) {
                 return buildAiMessage("❌ Failed to fetch events: " + e.getMessage());
             }
         }
 
-        // Step 5: Create state
+        // Build state for CREATE/EDIT
         PendingEventState state = new PendingEventState();
         state.setIntent(intentStr);
         state.setSummary(json.path("summary").asText(""));
@@ -123,20 +114,18 @@ public class ConversationService {
             state.mergeFrom(previousState);
         }
 
-        // Step 6: Missing info?
         if (!state.isComplete()) {
-            pendingEvents.put(userId, state);
+            pendingEvents.put(user.getId(), state);
             return buildAiMessage(clarificationService.buildClarificationMessage(state));
         }
 
-        // Step 7: Create event
-        pendingEvents.remove(userId);
+        pendingEvents.remove(user.getId());
         Event event = eventParser.parseFromJson(json);
 
         try {
-            Map<String, String> created = eventService.createEvent(calendarContext.getCalendarId(), event);
+            Map<String, String> created = eventService.createEvent(calendarId, event, user);
             return eventResponseBuilder.buildEventCardResponse(event, created);
-        } catch (IOException e) {
+        } catch (Exception e) {
             return buildAiMessage("❌ Failed to create the event: " + e.getMessage());
         }
     }
