@@ -4,6 +4,7 @@ import com.handson.CalenderGPT.context.CalendarContext;
 import com.handson.CalenderGPT.model.Event;
 import com.handson.CalenderGPT.model.User;
 import com.handson.CalenderGPT.service.EventService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -13,15 +14,11 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/events")
+@RequiredArgsConstructor
 public class EventController {
 
     private final CalendarContext calendarContext;
     private final EventService eventService;
-
-    public EventController(CalendarContext calendarContext, EventService eventService) {
-        this.calendarContext = calendarContext;
-        this.eventService = eventService;
-    }
 
     @PostMapping("/create")
     public Map<String, String> createEvent(@RequestBody Event eventRequest) throws Exception {
@@ -35,6 +32,13 @@ public class EventController {
         String calendarId = getCalendarId();
         User user = getAuthenticatedUser();
         return eventService.updateEvent(calendarId, eventId, eventRequest, user);
+    }
+
+    @DeleteMapping("/delete/{eventId}")
+    public void deleteEvent(@PathVariable String eventId) throws Exception {
+        String calendarId = getCalendarId();
+        User user = getAuthenticatedUser();
+        eventService.deleteEvent(calendarId, eventId, user);
     }
 
     @GetMapping("/view")
@@ -51,13 +55,6 @@ public class EventController {
         return eventService.getEventById(calendarId, eventId, user);
     }
 
-    @DeleteMapping("/delete/{eventId}")
-    public void deleteEvent(@PathVariable String eventId) throws Exception {
-        String calendarId = getCalendarId();
-        User user = getAuthenticatedUser();
-        eventService.deleteEvent(calendarId, eventId, user);
-    }
-
     @PutMapping("/{eventId}/guests")
     public Map<String, String> addGuestsToEvent(@PathVariable String eventId, @RequestBody List<String> guests) throws Exception {
         String calendarId = getCalendarId();
@@ -66,25 +63,25 @@ public class EventController {
     }
 
     @PutMapping("/{eventId}/guests/remove")
-    public Map<String, String> removeGuestsFromEvent(@PathVariable String eventId, @RequestBody List<String> guests) throws Exception {
+    public Map<String, String> removeGuestsFromEvent(@PathVariable String eventId, @RequestBody List<String> guestsToRemove) throws Exception {
         String calendarId = getCalendarId();
         User user = getAuthenticatedUser();
-        return eventService.removeGuests(calendarId, eventId, guests, user);
+        return eventService.removeGuests(calendarId, eventId, guestsToRemove, user);
     }
 
     private String getCalendarId() {
         String calendarId = calendarContext.getCalendarId();
         if (calendarId == null) {
-            throw new IllegalStateException("Calendar ID not found");
+            throw new IllegalStateException("❌ Calendar ID not found in context.");
         }
         return calendarId;
     }
 
     private User getAuthenticatedUser() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !(auth.getPrincipal() instanceof User)) {
-            throw new IllegalStateException("Authenticated user not found");
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof User)) {
+            throw new IllegalStateException("❌ Authenticated user not found.");
         }
-        return (User) auth.getPrincipal();
+        return (User) authentication.getPrincipal();
     }
 }

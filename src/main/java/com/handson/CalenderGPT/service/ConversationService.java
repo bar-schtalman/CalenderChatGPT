@@ -4,66 +4,50 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.handson.CalenderGPT.context.CalendarContext;
 import com.handson.CalenderGPT.model.*;
-import com.handson.CalenderGPT.repository.ChatSessionRepository;
-import com.handson.CalenderGPT.repository.UserMessageRepository;
+import com.handson.CalenderGPT.repository.ChatMessageRepository;
+import com.handson.CalenderGPT.repository.ConversationRepository;
 import com.handson.CalenderGPT.repository.UserRepository;
+import com.handson.CalenderGPT.service.helper.ConversationHelper;
 import com.theokanning.openai.completion.chat.ChatCompletionResult;
 import com.theokanning.openai.completion.chat.ChatMessage;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
 import java.util.*;
 
 @Service
+@RequiredArgsConstructor
 public class ConversationService {
 
     private final IntentService intentService;
     private final EventService eventService;
     private final ChatGPTService chatGPTService;
-    private final UserMessageRepository messageRepository;
+    private final ChatMessageRepository chatMessageRepository;
     private final UserRepository userRepository;
-    private final ChatSessionRepository chatSessionRepository;
+    private final ConversationRepository conversationRepository;
     private final ClarificationService clarificationService;
     private final EventResponseBuilder eventResponseBuilder;
+    private final ConversationHelper conversationHelper;
+
     private final EventParser eventParser;
 
     private final Map<UUID, PendingEventState> pendingEvents = new HashMap<>();
 
-    public ConversationService(IntentService intentService,
-                               EventService eventService,
-                               ChatGPTService chatGPTService,
-                               UserMessageRepository messageRepository,
-                               UserRepository userRepository,
-                               ChatSessionRepository chatSessionRepository,
-                               ClarificationService clarificationService,
-                               EventResponseBuilder eventResponseBuilder,
-                               EventParser eventParser) {
-        this.intentService = intentService;
-        this.eventService = eventService;
-        this.chatGPTService = chatGPTService;
-        this.messageRepository = messageRepository;
-        this.userRepository = userRepository;
-        this.chatSessionRepository = chatSessionRepository;
-        this.clarificationService = clarificationService;
-        this.eventResponseBuilder = eventResponseBuilder;
-        this.eventParser = eventParser;
-    }
-
     @Transactional
     public String handlePrompt(String prompt, User user, CalendarContext calendarContext) {
-        ChatSession session = getOrCreateLatestSession(user);
-        messageRepository.save(new UserMessage(user, session, true, prompt));
+        Conversation conversation = conversationHelper.getOrCreateLatestConversation(user);
+        chatMessageRepository.save(new com.handson.CalenderGPT.model.ChatMessage(user, conversation, true, prompt));
 
         PendingEventState previousState = pendingEvents.get(user.getId());
         String mergedPrompt = previousState != null ? previousState.getSummary() + " " + prompt : prompt;
 
-        String extractedJson = intentService.extractDetailsFromPrompt(mergedPrompt);
         JsonNode json;
         try {
+            String extractedJson = intentService.extractDetailsFromPrompt(mergedPrompt);
             json = new ObjectMapper().readTree(extractedJson);
         } catch (Exception e) {
-            return buildAiMessage("⚠️ I couldn't understand that. Can you rephrase?");
+            return storeAssistantMessage(user, conversation, "⚠️ I couldn't understand that. Can you rephrase?");
         }
 
         String intentStr = json.path("intent").asText("");
@@ -74,8 +58,7 @@ public class ConversationService {
             );
             ChatCompletionResult result = chatGPTService.callChatGPT(messages);
             String reply = result.getChoices().get(0).getMessage().getContent().trim();
-            messageRepository.save(new UserMessage(user, session, false, reply));
-            return buildAiMessage(reply);
+            return storeAssistantMessage(user, conversation, reply);
         }
 
         if (previousState != null && !previousState.getIntent().equalsIgnoreCase(intentStr)) {
@@ -92,16 +75,17 @@ public class ConversationService {
                 String end = json.get("end").asText();
                 List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, start, end, user);
 
-                return events.isEmpty()
+                String response = events.isEmpty()
                         ? eventResponseBuilder.buildNoEventsFound(start, end)
                         : eventResponseBuilder.buildEventList(events, calendarId);
 
+                return storeAssistantMessage(user, conversation, response);
+
             } catch (Exception e) {
-                return buildAiMessage("❌ Failed to fetch events: " + e.getMessage());
+                return storeAssistantMessage(user, conversation, "❌ Failed to fetch events: " + e.getMessage());
             }
         }
 
-        // Build state for CREATE/EDIT
         PendingEventState state = new PendingEventState();
         state.setIntent(intentStr);
         state.setSummary(json.path("summary").asText(""));
@@ -116,7 +100,7 @@ public class ConversationService {
 
         if (!state.isComplete()) {
             pendingEvents.put(user.getId(), state);
-            return buildAiMessage(clarificationService.buildClarificationMessage(state));
+            return storeAssistantMessage(user, conversation, clarificationService.buildClarificationMessage(state));
         }
 
         pendingEvents.remove(user.getId());
@@ -124,22 +108,14 @@ public class ConversationService {
 
         try {
             Map<String, String> created = eventService.createEvent(calendarId, event, user);
-            return eventResponseBuilder.buildEventCardResponse(event, created);
+            String response = eventResponseBuilder.buildEventCardResponse(event, created);
+            return storeAssistantMessage(user, conversation, response);
         } catch (Exception e) {
-            return buildAiMessage("❌ Failed to create the event: " + e.getMessage());
+            return storeAssistantMessage(user, conversation, "❌ Failed to create the event: " + e.getMessage());
         }
     }
 
-    private ChatSession getOrCreateLatestSession(User user) {
-        return chatSessionRepository.findByUserIdOrderByCreatedAtDesc(user.getId()).stream()
-                .findFirst()
-                .orElseGet(() -> {
-                    ChatSession session = new ChatSession();
-                    session.setUser(user);
-                    session.setTitle("New Chat");
-                    return chatSessionRepository.save(session);
-                });
-    }
+
 
     private IntentType mapIntentType(String extractedIntent) {
         return switch (extractedIntent.toUpperCase()) {
@@ -149,6 +125,11 @@ public class ConversationService {
             case "VIEW" -> IntentType.VIEW_EVENTS;
             default -> IntentType.NONE;
         };
+    }
+
+    private String storeAssistantMessage(User user, Conversation conversation, String content) {
+        chatMessageRepository.save(new com.handson.CalenderGPT.model.ChatMessage(user, conversation, false, content));
+        return content;
     }
 
     private String buildAiMessage(String content) {

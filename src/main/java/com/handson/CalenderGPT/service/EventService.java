@@ -1,11 +1,19 @@
 package com.handson.CalenderGPT.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.client.util.DateTime;
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.*;
+import com.handson.CalenderGPT.model.ChatMessage;
+import com.handson.CalenderGPT.model.Conversation;
 import com.handson.CalenderGPT.model.Event;
+import com.handson.CalenderGPT.model.EventHistory;
 import com.handson.CalenderGPT.model.User;
 import com.handson.CalenderGPT.provider.GoogleCalendarProvider;
+import com.handson.CalenderGPT.repository.ChatMessageRepository;
+import com.handson.CalenderGPT.repository.EventHistoryRepository;
+import com.handson.CalenderGPT.service.helper.ConversationHelper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -17,26 +25,38 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class EventService {
 
     private final GoogleCalendarProvider googleCalendarProvider;
+    private final EventHistoryRepository eventHistoryRepository;
+    private final ChatMessageRepository chatMessageRepository;
+    private final ConversationHelper conversationHelper;
 
-    @Autowired
-    public EventService(GoogleCalendarProvider googleCalendarProvider) {
-        this.googleCalendarProvider = googleCalendarProvider;
-    }
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // Create Event using JWT-authenticated User
     public Map<String, String> createEvent(String calendarId, Event eventRequest, User user) throws IOException, GeneralSecurityException {
         Calendar googleCalendarClient = googleCalendarProvider.getCalendarClient(user);
-        return createEventInternal(calendarId, eventRequest, googleCalendarClient);
+        Map<String, String> newEvent = createEventInternal(calendarId, eventRequest, googleCalendarClient);
+
+        eventHistoryRepository.save(EventHistory.builder()
+                .user(user)
+                .calendarId(calendarId)
+                .eventId(newEvent.get("id"))
+                .action("CREATE")
+                .newData(objectMapper.writeValueAsString(newEvent))
+                .build());
+
+        saveSystemMessage(user, "📅 Event created: " + newEvent.get("summary"));
+        return newEvent;
     }
 
-    // Update Event using JWT-authenticated User
     public String updateEvent(String calendarId, String eventId, Event eventRequest, User user) throws IOException, GeneralSecurityException {
         Calendar googleCalendarClient = googleCalendarProvider.getCalendarClient(user);
         com.google.api.services.calendar.model.Event existingEvent =
                 googleCalendarClient.events().get(calendarId, eventId).execute();
+
+        String oldData = objectMapper.writeValueAsString(mapEvent(existingEvent));
 
         existingEvent.setSummary(eventRequest.getSummary());
         existingEvent.setLocation(eventRequest.getLocation());
@@ -51,39 +71,40 @@ public class EventService {
             existingEvent.setAttendees(attendees);
         }
 
-        return googleCalendarClient.events().update(calendarId, eventId, existingEvent).execute().getHtmlLink();
+        com.google.api.services.calendar.model.Event updated = googleCalendarClient.events().update(calendarId, eventId, existingEvent).execute();
+        String newData = objectMapper.writeValueAsString(mapEvent(updated));
+
+        eventHistoryRepository.save(EventHistory.builder()
+                .user(user)
+                .calendarId(calendarId)
+                .eventId(eventId)
+                .action("UPDATE")
+                .oldData(oldData)
+                .newData(newData)
+                .build());
+
+        saveSystemMessage(user, "✏️ Event updated: " + updated.getSummary());
+        return updated.getHtmlLink();
     }
 
-    // Fetch Events in a Date Range using JWT-authenticated User
-    public List<Map<String, String>> getEventsInDateRange(String calendarId, String startDate, String endDate, User user) throws IOException, GeneralSecurityException {
-        Calendar googleCalendarClient = googleCalendarProvider.getCalendarClient(user);
-        Events events = googleCalendarClient.events().list(calendarId)
-                .setTimeMin(new DateTime(startDate))
-                .setTimeMax(new DateTime(endDate))
-                .setOrderBy("startTime")
-                .setSingleEvents(true)
-                .setFields("items(id,summary,start,end,location,description,attendees)")
-                .execute();
-
-        return events.getItems().stream().map(this::mapEvent).collect(Collectors.toList());
-    }
-
-    // Fetch an Event by ID using JWT-authenticated User
-    public Map<String, String> getEventById(String calendarId, String eventId, User user) throws IOException, GeneralSecurityException {
-        Calendar googleCalendarClient = googleCalendarProvider.getCalendarClient(user);
-        com.google.api.services.calendar.model.Event event =
-                googleCalendarClient.events().get(calendarId, eventId).execute();
-
-        return mapEvent(event);
-    }
-
-    // Delete an Event using JWT-authenticated User
     public void deleteEvent(String calendarId, String eventId, User user) throws IOException, GeneralSecurityException {
         Calendar googleCalendarClient = googleCalendarProvider.getCalendarClient(user);
+        com.google.api.services.calendar.model.Event existing = googleCalendarClient.events().get(calendarId, eventId).execute();
+        String oldData = objectMapper.writeValueAsString(mapEvent(existing));
+
         googleCalendarClient.events().delete(calendarId, eventId).execute();
+
+        eventHistoryRepository.save(EventHistory.builder()
+                .user(user)
+                .calendarId(calendarId)
+                .eventId(eventId)
+                .action("DELETE")
+                .oldData(oldData)
+                .build());
+
+        saveSystemMessage(user, "🗑️ Event deleted: " + existing.getSummary());
     }
 
-    // Internal method to handle event creation logic (no changes)
     private Map<String, String> createEventInternal(String calendarId, Event eventRequest, Calendar googleCalendarClient) throws IOException {
         DateTime startDateTime = convertToGoogleDateTime(eventRequest.getStart(), eventRequest.getTimeZone());
         DateTime endDateTime = convertToGoogleDateTime(eventRequest.getEnd(), eventRequest.getTimeZone());
@@ -169,10 +190,11 @@ public class EventService {
         return map;
     }
 
-    // Add guests to an existing event
     public Map<String, String> addGuests(String calendarId, String eventId, List<String> guests, User user) throws IOException, GeneralSecurityException {
         Calendar calendar = googleCalendarProvider.getCalendarClient(user);
         com.google.api.services.calendar.model.Event event = calendar.events().get(calendarId, eventId).execute();
+
+        String oldData = objectMapper.writeValueAsString(mapEvent(event));
 
         List<EventAttendee> existingAttendees = Optional.ofNullable(event.getAttendees()).orElse(new ArrayList<>());
         Set<String> existingEmails = existingAttendees.stream()
@@ -187,13 +209,26 @@ public class EventService {
 
         event.setAttendees(existingAttendees);
         com.google.api.services.calendar.model.Event updatedEvent = calendar.events().update(calendarId, eventId, event).execute();
+
+        String newData = objectMapper.writeValueAsString(mapEvent(updatedEvent));
+        eventHistoryRepository.save(EventHistory.builder()
+                .user(user)
+                .calendarId(calendarId)
+                .eventId(eventId)
+                .action("ADD_GUESTS")
+                .oldData(oldData)
+                .newData(newData)
+                .build());
+
+        saveSystemMessage(user, "👥 Guests added to event: " + updatedEvent.getSummary());
         return mapEvent(updatedEvent);
     }
 
-    // Remove guests from an existing event
     public Map<String, String> removeGuests(String calendarId, String eventId, List<String> emailsToRemove, User user) throws IOException, GeneralSecurityException {
         Calendar calendar = googleCalendarProvider.getCalendarClient(user);
         com.google.api.services.calendar.model.Event event = calendar.events().get(calendarId, eventId).execute();
+
+        String oldData = objectMapper.writeValueAsString(mapEvent(event));
 
         List<EventAttendee> updatedAttendees = Optional.ofNullable(event.getAttendees()).orElse(new ArrayList<>())
                 .stream()
@@ -202,7 +237,51 @@ public class EventService {
 
         event.setAttendees(updatedAttendees);
         com.google.api.services.calendar.model.Event updatedEvent = calendar.events().update(calendarId, eventId, event).execute();
+
+        String newData = objectMapper.writeValueAsString(mapEvent(updatedEvent));
+        eventHistoryRepository.save(EventHistory.builder()
+                .user(user)
+                .calendarId(calendarId)
+                .eventId(eventId)
+                .action("REMOVE_GUESTS")
+                .oldData(oldData)
+                .newData(newData)
+                .build());
+
+        saveSystemMessage(user, "🚫 Guests removed from event: " + updatedEvent.getSummary());
         return mapEvent(updatedEvent);
     }
 
+    public List<Map<String, String>> getEventsInDateRange(String calendarId, String startDate, String endDate, User user) throws IOException, GeneralSecurityException {
+        Calendar googleCalendarClient = googleCalendarProvider.getCalendarClient(user);
+        Events events = googleCalendarClient.events().list(calendarId)
+                .setTimeMin(new DateTime(startDate))
+                .setTimeMax(new DateTime(endDate))
+                .setOrderBy("startTime")
+                .setSingleEvents(true)
+                .setFields("items(id,summary,start,end,location,description,attendees)")
+                .execute();
+
+        return events.getItems().stream().map(this::mapEvent).collect(Collectors.toList());
+    }
+
+    public Map<String, String> getEventById(String calendarId, String eventId, User user) throws IOException, GeneralSecurityException {
+        Calendar googleCalendarClient = googleCalendarProvider.getCalendarClient(user);
+        com.google.api.services.calendar.model.Event event =
+                googleCalendarClient.events().get(calendarId, eventId).execute();
+
+        return mapEvent(event);
+    }
+
+    private void saveSystemMessage(User user, String content) {
+        Conversation conversation = conversationHelper.getOrCreateLatestConversation(user);
+        ChatMessage message = ChatMessage.builder()
+                .user(user)
+                .conversation(conversation)
+                .isUser(false)
+                .type("event-update")
+                .content(content)
+                .build();
+        chatMessageRepository.save(message);
+    }
 }

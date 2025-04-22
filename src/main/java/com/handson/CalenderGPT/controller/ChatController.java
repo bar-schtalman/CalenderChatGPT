@@ -25,6 +25,7 @@ public class ChatController {
                                 @RequestBody String message,
                                 HttpServletRequest request) {
         log.info("Received message from {}: {}", user.getEmail(), message);
-        return conversationService.handlePrompt(message, user,calendarContext);
+        return conversationService.handlePrompt(message, user, calendarContext);
+
     }
 }
