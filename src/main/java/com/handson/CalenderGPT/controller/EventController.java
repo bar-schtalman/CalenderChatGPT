@@ -1,11 +1,16 @@
 package com.handson.CalenderGPT.controller;
 
 import com.handson.CalenderGPT.context.CalendarContext;
+import com.handson.CalenderGPT.dto.EventHistoryDTO;
 import com.handson.CalenderGPT.model.Event;
+import com.handson.CalenderGPT.model.EventHistory;
 import com.handson.CalenderGPT.model.User;
+import com.handson.CalenderGPT.repository.EventHistoryRepository;
+import com.handson.CalenderGPT.service.EventHistoryService;
 import com.handson.CalenderGPT.service.EventService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,6 +24,9 @@ public class EventController {
 
     private final CalendarContext calendarContext;
     private final EventService eventService;
+
+    private final EventHistoryRepository eventHistoryRepository;
+    private final EventHistoryService eventHistoryService;
 
     @PostMapping("/create")
     public Map<String, String> createEvent(@RequestBody Event eventRequest) throws Exception {
@@ -83,5 +91,15 @@ public class EventController {
             throw new IllegalStateException("❌ Authenticated user not found.");
         }
         return (User) authentication.getPrincipal();
+    }
+
+    @GetMapping("/history")
+    public List<EventHistoryDTO> getUserEventHistory(@AuthenticationPrincipal User user) {
+        List<EventHistory> histories = eventHistoryRepository.findByUserIdOrderByTimestampDesc(user.getId())
+                .stream()
+                .limit(20)
+                .toList();
+
+        return eventHistoryService.formatEventHistories(histories);
     }
 }

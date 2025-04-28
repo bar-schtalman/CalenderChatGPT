@@ -5,6 +5,7 @@ import com.google.api.services.calendar.model.CalendarList;
 import com.google.api.services.calendar.model.CalendarListEntry;
 import com.handson.CalenderGPT.config.GoogleCalendarConfig;
 import com.handson.CalenderGPT.context.CalendarContext;
+import com.handson.CalenderGPT.service.EventHistoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,9 @@ public class CalendarController {
 
     private final GoogleCalendarService googleCalendarService;
     private final CalendarContext calendarContext;
+
+    @Autowired
+    private EventHistoryService eventHistoryService;
 
     @Autowired
     public CalendarController(GoogleCalendarService googleCalendarService, CalendarContext calendarContext) {

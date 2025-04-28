@@ -20,8 +20,7 @@ public class PendingEventStateEntity {
     @ManyToOne(optional = false)
     private User user;
 
-    @ManyToOne(optional = true)
-    private Conversation conversation;
+
 
     private String intent;
 

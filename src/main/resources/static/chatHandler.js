@@ -7,12 +7,20 @@ function authHeader() {
 $(document).ready(() => {
   // ✅ Store JWT from ?token=... into localStorage
   const urlParams = new URLSearchParams(window.location.search);
-  const token = urlParams.get('token');
-  if (token) {
-    localStorage.setItem('AUTH_TOKEN', token);
+  const tokenFromUrl = urlParams.get('token');
+  if (tokenFromUrl) {
+    localStorage.setItem('AUTH_TOKEN', tokenFromUrl);
     const newUrl = window.location.origin + window.location.pathname;
     window.history.replaceState({}, document.title, newUrl);
   }
+
+  const jwtToken = localStorage.getItem("AUTH_TOKEN");
+  if (!jwtToken) {
+    console.error("❌ No JWT token found. Cannot proceed.");
+    alert("Authentication failed. Please login again.");
+    return;
+  }
+  console.log("🛡️ JWT Token loaded:", jwtToken);
 
   const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   console.log("🕒 Detected browser time zone:", browserTimeZone);
@@ -56,8 +64,8 @@ $(document).ready(() => {
         }
       },
       error: function (xhr, status, error) {
-        console.error("Error loading calendars:", status, error, xhr.responseText);
-        alert("Failed to load calendars. Check the console for more details.");
+        console.error("❌ Error loading calendars:", status, error, xhr.responseText);
+        alert("Failed to load calendars. Check console.");
       }
     });
   }
@@ -77,9 +85,9 @@ $(document).ready(() => {
     });
   }
 
-  $('#calendarSelect').on('change', function () {
+  $("#calendarSelect").on('change', function () {
     selectedCalendarId = $(this).val();
-    console.log("Selected Calendar ID: " + selectedCalendarId);
+    console.log("📅 Selected Calendar ID: " + selectedCalendarId);
     sessionStorage.setItem('selectedCalendarId', selectedCalendarId);
     updateServerCalendar(selectedCalendarId);
   });
@@ -102,20 +110,15 @@ $(document).ready(() => {
       },
       data: JSON.stringify(message),
       success: (response) => {
-        try {
-          const parsed = JSON.parse(response);
+        const parsed = JSON.parse(response);
 
-          parsed.forEach((msg) => {
-            if (msg.role === "event") {
-              appendEvent(msg);
-            } else {
-              appendMessage(msg.role, msg.content);
-            }
-          });
-        } catch (e) {
-          console.error("JSON parsing failed", e);
-          appendMessage("ai", response);
-        }
+        parsed.forEach((msg) => {
+          if (msg.role === "event") {
+            appendEvent(msg);
+          } else {
+            appendMessage(msg.role, msg.content);
+          }
+        });
       },
       error: (xhr) => {
         console.error("❌ Chat API error:", xhr.responseText);
@@ -124,5 +127,51 @@ $(document).ready(() => {
     });
   });
 
-  loadCalendars();
+$("#showActivityBtn").on("click", function () {
+  $.ajax({
+    url: "/api/events/history",
+    method: "GET",
+    headers: authHeader(),
+    success: function (data) {
+      const activityList = $("#activityItems");
+      activityList.empty();
+
+      if (data.length === 0) {
+        activityList.append("<li class='list-group-item'>No recent activity found.</li>");
+      } else {
+        data.forEach(activity => {
+          const item = `
+            <li class="list-group-item">
+              <div style="font-weight:bold;">${activity.eventContext}</div>
+              ${activity.actionDescription}
+              <br><small>${new Date(activity.timestamp).toLocaleString()}</small>
+            </li>`;
+          activityList.append(item);
+        });
+      }
+
+      $("#activityList").toggle(); // Toggle open/close
+    },
+    error: function (xhr) {
+      console.error("❌ Failed to load activity history:", xhr.responseText);
+      alert("❌ Failed to load activity history. Check console.");
+    }
+  });
+});
+
+
+  // 🛠️ ✅ Important: Only call calendars after JWT confirmed and server is ready
+  $.ajax({
+    url: "/api/events/history",
+    method: "GET",
+    headers: authHeader(),
+    success: function () {
+      console.log("✅ Server ready. Loading calendars now...");
+      loadCalendars();
+    },
+    error: function (xhr) {
+      console.error("❌ Server not ready for calendars:", xhr.responseText);
+      alert("❌ Cannot contact server. Please login again.");
+    }
+  });
 });

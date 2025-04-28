@@ -4,17 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.client.util.DateTime;
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.*;
-import com.handson.CalenderGPT.model.ChatMessage;
-import com.handson.CalenderGPT.model.Conversation;
 import com.handson.CalenderGPT.model.Event;
 import com.handson.CalenderGPT.model.EventHistory;
 import com.handson.CalenderGPT.model.User;
 import com.handson.CalenderGPT.provider.GoogleCalendarProvider;
-import com.handson.CalenderGPT.repository.ChatMessageRepository;
 import com.handson.CalenderGPT.repository.EventHistoryRepository;
-import com.handson.CalenderGPT.service.helper.ConversationHelper;
+
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -30,8 +26,6 @@ public class EventService {
 
     private final GoogleCalendarProvider googleCalendarProvider;
     private final EventHistoryRepository eventHistoryRepository;
-    private final ChatMessageRepository chatMessageRepository;
-    private final ConversationHelper conversationHelper;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -47,7 +41,7 @@ public class EventService {
                 .newData(objectMapper.writeValueAsString(newEvent))
                 .build());
 
-        saveSystemMessage(user, "📅 Event created: " + newEvent.get("summary"));
+
         return newEvent;
     }
 
@@ -83,7 +77,7 @@ public class EventService {
                 .newData(newData)
                 .build());
 
-        saveSystemMessage(user, "✏️ Event updated: " + updated.getSummary());
+
         return updated.getHtmlLink();
     }
 
@@ -102,7 +96,7 @@ public class EventService {
                 .oldData(oldData)
                 .build());
 
-        saveSystemMessage(user, "🗑️ Event deleted: " + existing.getSummary());
+
     }
 
     private Map<String, String> createEventInternal(String calendarId, Event eventRequest, Calendar googleCalendarClient) throws IOException {
@@ -220,7 +214,7 @@ public class EventService {
                 .newData(newData)
                 .build());
 
-        saveSystemMessage(user, "👥 Guests added to event: " + updatedEvent.getSummary());
+
         return mapEvent(updatedEvent);
     }
 
@@ -248,7 +242,7 @@ public class EventService {
                 .newData(newData)
                 .build());
 
-        saveSystemMessage(user, "🚫 Guests removed from event: " + updatedEvent.getSummary());
+
         return mapEvent(updatedEvent);
     }
 
@@ -273,15 +267,5 @@ public class EventService {
         return mapEvent(event);
     }
 
-    private void saveSystemMessage(User user, String content) {
-        Conversation conversation = conversationHelper.getOrCreateLatestConversation(user);
-        ChatMessage message = ChatMessage.builder()
-                .user(user)
-                .conversation(conversation)
-                .isUser(false)
-                .type("event-update")
-                .content(content)
-                .build();
-        chatMessageRepository.save(message);
-    }
+
 }
