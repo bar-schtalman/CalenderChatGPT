@@ -101,25 +101,48 @@ $(document).ready(() => {
     appendMessage("user", message);
     $("#chatInput").val("");
 
-    $.ajax({
-      url: "/chat/message",
-      method: "POST",
-      headers: {
-        ...authHeader(),
-        'Content-Type': 'application/json'
-      },
-      data: JSON.stringify(message),
-      success: (response) => {
-        const parsed = JSON.parse(response);
+$.ajax({
+  url: "/chat/message",
+  method: "POST",
+  headers: {
+    ...authHeader(),
+    'Content-Type': 'application/json'
+  },
+  data: JSON.stringify(message),
+  success: (response) => {
+    const parsed = JSON.parse(response);
 
-        parsed.forEach((msg) => {
-          if (msg.role === "event") {
-            appendEvent(msg);
-          } else {
-            appendMessage(msg.role, msg.content);
+    parsed.forEach((msg) => {
+      if (msg.role === "event") {
+        // === CREATE path: msg.content is a stringified array of event objects
+        if (typeof msg.content === "string") {
+          let events;
+          try {
+            events = JSON.parse(msg.content);
+          } catch (e) {
+            console.error("Failed to parse event JSON:", msg.content, e);
+            return;
           }
-        });
-      },
+          events.forEach(ev => appendEvent(ev));
+
+        // === VIEW path: msg itself is an event object
+        } else if (msg.id) {
+          appendEvent(msg);
+
+        } else {
+          console.warn("Unknown event message format:", msg);
+        }
+
+      } else {
+        // normal user/assistant messages
+        const role = msg.role === "ai" ? "assistant" : msg.role;
+        appendMessage(role, msg.content);
+      }
+    });
+  },
+
+
+
       error: (xhr) => {
         console.error("❌ Chat API error:", xhr.responseText);
         appendMessage("ai", "❌ Error contacting server");
