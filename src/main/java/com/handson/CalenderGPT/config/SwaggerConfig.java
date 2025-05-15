@@ -17,11 +17,7 @@ import java.util.Map;
 @Configuration
 public class SwaggerConfig {
 
-    @Value("${spring.security.oauth2.client.registration.google.client-id}")
-    private String clientId;
 
-    @Value("${spring.security.oauth2.client.registration.google.client-secret}")
-    private String clientSecret;
 
     @Bean
     public OpenAPI customOpenAPI() {

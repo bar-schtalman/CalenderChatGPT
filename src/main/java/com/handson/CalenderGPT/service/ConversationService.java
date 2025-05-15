@@ -27,80 +27,107 @@ public class ConversationService {
     private final EventParser eventParser;
 
     private final Map<UUID, PendingEventState> pendingEvents = new HashMap<>();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
     public String handlePrompt(String prompt, User user, CalendarContext calendarContext) {
-        PendingEventState previousState = pendingEvents.get(user.getId());
-        String mergedPrompt = previousState != null ? previousState.getSummary() + " " + prompt : prompt;
-
-        JsonNode json;
-        try {
-            String extractedJson = intentService.extractDetailsFromPrompt(mergedPrompt);
-            json = new ObjectMapper().readTree(extractedJson);
-        } catch (Exception e) {
+        String merged = mergeWithPreviousSummary(prompt, user);
+        JsonNode details = parseDetailsJson(merged);
+        if (details == null) {
             return wrapAsJson("⚠️ I couldn't understand that. Can you rephrase?", "ai");
         }
 
-        String intentStr = json.path("intent").asText("");
-        if (intentStr.equalsIgnoreCase("NONE")) {
-            List<ChatMessage> messages = List.of(
-                    new ChatMessage("system", "You are a helpful assistant."),
-                    new ChatMessage("user", prompt)
-            );
-            ChatCompletionResult result = chatGPTService.callChatGPT(messages);
-            String reply = result.getChoices().get(0).getMessage().getContent().trim();
-            return wrapAsJson(reply, "ai");
+        String intentStr = details.path("intent").asText("");
+        if (isNoneIntent(intentStr)) {
+            return handleNoneIntent(prompt);
         }
 
-        if (previousState != null && !previousState.getIntent().equalsIgnoreCase(intentStr)) {
-            pendingEvents.remove(user.getId());
-            previousState = null;
-        }
-
+        PendingEventState prev = resetStateIfIntentChanged(intentStr, user);
         IntentType intent = mapIntentType(intentStr);
-        String calendarId = calendarContext.getCalendarId();
 
         if (intent == IntentType.VIEW_EVENTS) {
-            try {
-                String start = json.get("start").asText();
-                String end = json.get("end").asText();
-                List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, start, end, user);
-
-                if (events.isEmpty()) {
-                    return eventResponseBuilder.buildNoEventsFound(start, end); // already JSON
-                } else {
-                    return eventResponseBuilder.buildEventList(events, calendarId); // already JSON
-                }
-            } catch (Exception e) {
-                return wrapAsJson("❌ Failed to fetch events: " + e.getMessage(), "ai");
-            }
+            return handleViewEvents(details, calendarContext.getCalendarId(), user);
         }
 
-        PendingEventState state = new PendingEventState();
-        state.setIntent(intentStr);
-        state.setSummary(json.path("summary").asText(""));
-        state.setStart(json.path("start").asText(""));
-        state.setEnd(json.path("end").asText(""));
-        state.setLocation(json.path("location").asText(""));
-        state.setDescription(json.path("description").asText(""));
-
-        if (previousState != null) {
-            state.mergeFrom(previousState);
-        }
-
+        PendingEventState state = buildOrUpdateState(details, prev);
         if (!state.isComplete()) {
             pendingEvents.put(user.getId(), state);
-            String clarification = clarificationService.buildClarificationMessage(state);
-            return wrapAsJson(clarification, "ai");
+            return wrapAsJson(clarificationService.buildClarificationMessage(state), "ai");
         }
 
         pendingEvents.remove(user.getId());
-        Event event = eventParser.parseFromJson(json);
+        return handleCreateEvent(details, calendarContext.getCalendarId(), user);
+    }
 
+    private String mergeWithPreviousSummary(String prompt, User user) {
+        PendingEventState prev = pendingEvents.get(user.getId());
+        return prev != null ? prev.getSummary() + " " + prompt : prompt;
+    }
+
+    private JsonNode parseDetailsJson(String text) {
+        try {
+            String extracted = intentService.extractDetailsFromPrompt(text);
+            return objectMapper.readTree(extracted);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private boolean isNoneIntent(String intent) {
+        return intent.equalsIgnoreCase("NONE");
+    }
+
+    private String handleNoneIntent(String prompt) {
+        List<ChatMessage> conv = List.of(
+                new ChatMessage("system", "You are a helpful assistant."),
+                new ChatMessage("user", prompt)
+        );
+        ChatCompletionResult res = chatGPTService.callChatGPT(conv);
+        String reply = res.getChoices().get(0).getMessage().getContent().trim();
+        return wrapAsJson(reply, "ai");
+    }
+
+    private PendingEventState resetStateIfIntentChanged(String intentStr, User user) {
+        PendingEventState prev = pendingEvents.get(user.getId());
+        if (prev != null && !prev.getIntent().equalsIgnoreCase(intentStr)) {
+            pendingEvents.remove(user.getId());
+            return null;
+        }
+        return prev;
+    }
+
+    private String handleViewEvents(JsonNode details, String calendarId, User user) {
+        try {
+            String start = details.get("start").asText();
+            String end = details.get("end").asText();
+            List<Map<String,String>> events = eventService.getEventsInDateRange(calendarId, start, end, user);
+            if (events.isEmpty()) {
+                return eventResponseBuilder.buildNoEventsFound(start, end);
+            }
+            return eventResponseBuilder.buildEventList(events, calendarId);
+        } catch (Exception e) {
+            return wrapAsJson("❌ Failed to fetch events: " + e.getMessage(), "ai");
+        }
+    }
+
+    private PendingEventState buildOrUpdateState(JsonNode details, PendingEventState prev) {
+        PendingEventState state = new PendingEventState();
+        state.setIntent(details.path("intent").asText(""));
+        state.setSummary(details.path("summary").asText(""));
+        state.setStart(details.path("start").asText(""));
+        state.setEnd(details.path("end").asText(""));
+        state.setLocation(details.path("location").asText(""));
+        state.setDescription(details.path("description").asText(""));
+        if (prev != null) state.mergeFrom(prev);
+        return state;
+    }
+
+    private String handleCreateEvent(JsonNode details, String calendarId, User user) {
+        Event event = eventParser.parseFromJson(details);
         try {
             Map<String, String> created = eventService.createEvent(calendarId, event, user);
-            String response = eventResponseBuilder.buildEventCardResponse(event, created);
-            return wrapAsJson(response, "event");
+            String resp = eventResponseBuilder.buildEventCardResponse(event, created);
+            return wrapAsJson(resp, "event");
         } catch (Exception e) {
             return wrapAsJson("❌ Failed to create the event: " + e.getMessage(), "ai");
         }
@@ -116,15 +143,11 @@ public class ConversationService {
         };
     }
 
-    // ✅ Helper: wraps simple replies into structured JSON with given role
-    private String wrapAsJson(String replyContent, String role) {
+    private String wrapAsJson(String content, String role) {
         try {
-            ObjectMapper mapper = new ObjectMapper();
-            List<Map<String, String>> replyList = List.of(
-                    Map.of("role", role, "content", replyContent)
-            );
-            return mapper.writeValueAsString(replyList);
-        } catch (Exception e) {
+            List<Map<String, String>> out = List.of(Map.of("role", role, "content", content));
+            return objectMapper.writeValueAsString(out);
+        } catch (Exception ex) {
             return "[{\"role\":\"ai\",\"content\":\"Error generating reply\"}]";
         }
     }

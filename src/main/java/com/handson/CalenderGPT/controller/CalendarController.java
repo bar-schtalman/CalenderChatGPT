@@ -25,8 +25,6 @@ public class CalendarController {
     private final GoogleCalendarService googleCalendarService;
     private final CalendarContext calendarContext;
 
-    @Autowired
-    private EventHistoryService eventHistoryService;
 
     @Autowired
     public CalendarController(GoogleCalendarService googleCalendarService, CalendarContext calendarContext) {
