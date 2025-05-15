@@ -1,5 +1,10 @@
 package com.handson.CalenderGPT.model;
 
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
 public class PendingEventState {
 
     private String intent;
@@ -10,74 +15,21 @@ public class PendingEventState {
     private String description = "";
     private boolean clarificationAsked = false;
 
-
+    /**
+     * An event state is “complete” once summary, start, and end are all non-empty.
+     */
     public boolean isComplete() {
         return !summary.isEmpty() && !start.isEmpty() && !end.isEmpty();
     }
 
-    // Getters and setters
-    public String getIntent() {
-        return intent;
-    }
-
-    public void setIntent(String intent) {
-        this.intent = intent;
-    }
-
-    public String getSummary() {
-        return summary;
-    }
-
-    public void setSummary(String summary) {
-        this.summary = summary;
-    }
-
-    public String getStart() {
-        return start;
-    }
-
-    public void setStart(String start) {
-        this.start = start;
-    }
-
-    public String getEnd() {
-        return end;
-    }
-
-    public void setEnd(String end) {
-        this.end = end;
-    }
-
-    public String getLocation() {
-        return location;
-    }
-
-    public void setLocation(String location) {
-        this.location = location;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public boolean isClarificationAsked() {
-        return clarificationAsked;
-    }
-
-    public void setClarificationAsked(boolean clarificationAsked) {
-        this.clarificationAsked = clarificationAsked;
-    }
-
-    // Optional: merge helper
+    /**
+     * Merge values from another state, but only fill in fields that are still blank.
+     */
     public void mergeFrom(PendingEventState update) {
-        if (this.summary.isEmpty()) this.summary = update.summary;
-        if (this.start.isEmpty()) this.start = update.start;
-        if (this.end.isEmpty()) this.end = update.end;
-        if (this.location.isEmpty()) this.location = update.location;
-        if (this.description.isEmpty()) this.description = update.description;
+        if (this.summary.isEmpty())       this.summary = update.summary;
+        if (this.start.isEmpty())         this.start       = update.start;
+        if (this.end.isEmpty())           this.end         = update.end;
+        if (this.location.isEmpty())      this.location    = update.location;
+        if (this.description.isEmpty())   this.description = update.description;
     }
 }
