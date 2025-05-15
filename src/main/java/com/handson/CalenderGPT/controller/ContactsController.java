@@ -1,6 +1,6 @@
 package com.handson.CalenderGPT.controller;
 
-import com.handson.CalenderGPT.service.GoogleContactsService;
+import com.handson.CalenderGPT.google.contacts.GoogleContactsService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;

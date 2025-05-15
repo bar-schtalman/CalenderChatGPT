@@ -1,20 +1,14 @@
 package com.handson.CalenderGPT.controller;
 
-import com.google.api.services.calendar.Calendar;
-import com.google.api.services.calendar.model.CalendarList;
 import com.google.api.services.calendar.model.CalendarListEntry;
-import com.handson.CalenderGPT.config.GoogleCalendarConfig;
 import com.handson.CalenderGPT.context.CalendarContext;
-import com.handson.CalenderGPT.service.EventHistoryService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import com.handson.CalenderGPT.service.GoogleCalendarService;
+import com.handson.CalenderGPT.google.calendar.GoogleCalendarService;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 

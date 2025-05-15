@@ -1,4 +1,4 @@
-package com.handson.CalenderGPT.provider;
+package com.handson.CalenderGPT.google.calendar;
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;

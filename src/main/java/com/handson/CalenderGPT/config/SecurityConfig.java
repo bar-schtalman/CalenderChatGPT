@@ -1,5 +1,6 @@
 package com.handson.CalenderGPT.config;
 
+import com.handson.CalenderGPT.google.oauth.GoogleOAuthSuccessHandler;
 import com.handson.CalenderGPT.jwt.JwtAuthenticationEntryPoint;
 import com.handson.CalenderGPT.jwt.JwtRequestFilter;
 import org.springframework.beans.factory.annotation.Autowired;

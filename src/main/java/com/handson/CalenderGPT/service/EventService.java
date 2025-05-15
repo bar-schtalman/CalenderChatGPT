@@ -7,7 +7,7 @@ import com.google.api.services.calendar.model.*;
 import com.handson.CalenderGPT.model.Event;
 import com.handson.CalenderGPT.model.EventHistory;
 import com.handson.CalenderGPT.model.User;
-import com.handson.CalenderGPT.provider.GoogleCalendarProvider;
+import com.handson.CalenderGPT.google.calendar.GoogleCalendarProvider;
 import com.handson.CalenderGPT.repository.EventHistoryRepository;
 import static com.handson.CalenderGPT.util.DateUtils.*;
 import lombok.RequiredArgsConstructor;

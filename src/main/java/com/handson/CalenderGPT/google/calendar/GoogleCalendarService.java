@@ -1,10 +1,9 @@
-package com.handson.CalenderGPT.service;
+package com.handson.CalenderGPT.google.calendar;
 
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.CalendarList;
 import com.google.api.services.calendar.model.CalendarListEntry;
 import com.handson.CalenderGPT.context.CalendarContext;
-import com.handson.CalenderGPT.provider.GoogleCalendarProvider;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.stereotype.Service;
 

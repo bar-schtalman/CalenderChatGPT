@@ -1,11 +1,11 @@
-package com.handson.CalenderGPT.service;
+package com.handson.CalenderGPT.google.contacts;
 
 import com.google.api.services.people.v1.PeopleService;
 import com.google.api.services.people.v1.model.SearchResponse;
 import com.google.api.services.people.v1.model.Person;
 import com.google.api.services.people.v1.model.SearchResult;
 import com.handson.CalenderGPT.context.CalendarContext;
-import com.handson.CalenderGPT.provider.GooglePeopleProvider;
+import com.handson.CalenderGPT.google.contacts.GooglePeopleProvider;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.stereotype.Service;
 import java.util.ArrayList;

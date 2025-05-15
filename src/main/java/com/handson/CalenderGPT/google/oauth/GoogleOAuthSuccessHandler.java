@@ -1,4 +1,4 @@
-package com.handson.CalenderGPT.config;
+package com.handson.CalenderGPT.google.oauth;
 
 import com.handson.CalenderGPT.model.User;
 import com.handson.CalenderGPT.service.UserService;

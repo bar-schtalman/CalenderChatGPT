@@ -1,4 +1,4 @@
-package com.handson.CalenderGPT.config;
+package com.handson.CalenderGPT.google.oauth;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

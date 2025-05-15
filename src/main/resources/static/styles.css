@@ -230,38 +230,33 @@ body {
   z-index: 999;
 }
 
-/* Style for each activity item */
-.activity-panel .list-group-item {
-  border: none;
-  padding: 12px 14px;
-  font-size: 15px;
-  line-height: 1.5;
-  background-color: transparent;
-}
+/* Style for each activity item */.activity-panel .list-group-item {
+                                    border: 1px solid #ddd;
+                                    border-radius: 8px;
+                                    margin-bottom: 10px;
+                                    padding: 12px 14px;
+                                    font-size: 15px;
+                                    line-height: 1.5;
+                                    background-color: #fff;
+                                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+                                    transition: box-shadow 0.2s ease;
+                                  }
 
-.activity-panel .list-group-item strong {
-  display: block;
-  font-size: 15.5px;
-  font-weight: bold;
-  margin-bottom: 3px;
-  color: #333;
-}
+                                  .activity-panel .list-group-item:hover {
+                                    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+                                  }
 
-.activity-panel .list-group-item small {
-  display: block;
-  margin-top: 4px;
-  color: #888;
-  font-size: 13px;
-}
+                                  .activity-panel .list-group-item strong {
+                                    display: block;
+                                    font-size: 15.5px;
+                                    font-weight: bold;
+                                    margin-bottom: 5px;
+                                    color: #333;
+                                  }
 
-/* Optional: space emoji and text better */
-.activity-panel .list-group-item strong::before {
-  content: "🗓️ ";
-  margin-right: 4px;
-}
-.activity-panel .list-group-item:hover {
-  background-color: #f5f5f5;
-}
-.activity-panel .list-group-item {
-  border-bottom: 1px solid #eee;
-}
+                                  .activity-panel .list-group-item small {
+                                    display: block;
+                                    margin-top: 6px;
+                                    color: #666;
+                                    font-size: 13px;
+                                  }

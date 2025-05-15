@@ -1,4 +1,4 @@
-package com.handson.CalenderGPT.provider;
+package com.handson.CalenderGPT.google.contacts;
 
 import com.google.api.services.people.v1.PeopleService;
 import com.google.api.services.people.v1.PeopleServiceScopes;

@@ -3,7 +3,7 @@ package com.handson.CalenderGPT.service;
 import com.google.api.services.calendar.Calendar;
 import com.handson.CalenderGPT.jwt.JwtTokenUtil;
 import com.handson.CalenderGPT.model.User;
-import com.handson.CalenderGPT.provider.GoogleCalendarProvider;
+import com.handson.CalenderGPT.google.calendar.GoogleCalendarProvider;
 import com.handson.CalenderGPT.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;

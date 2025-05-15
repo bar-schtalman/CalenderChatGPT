@@ -177,12 +177,17 @@ $("#showActivityBtn").on("click", function () {
         activityList.append("<li class='list-group-item'>No recent activity found.</li>");
       } else {
         data.forEach(activity => {
-          const item = `
-            <li class="list-group-item">
-              <div style="font-weight:bold;">${activity.eventContext}</div>
-              ${activity.actionDescription}
-              <br><small>${new Date(activity.timestamp).toLocaleString()}</small>
-            </li>`;
+const cleanContext = cleanEventContext(activity.eventContext);
+const icon = getActivityIcon(activity.actionDescription || "");
+
+const item = `
+  <li class="list-group-item">
+    <strong>${icon} ${cleanContext}</strong>
+    <span>${activity.actionDescription}</span>
+    <br><small>${new Date(activity.timestamp).toLocaleString()}</small>
+  </li>`;
+
+
           activityList.append(item);
         });
       }
@@ -195,6 +200,19 @@ $("#showActivityBtn").on("click", function () {
     }
   });
 });
+function getActivityIcon(action) {
+  const a = action.toLowerCase();
+  if (a.includes("deleted")) return "🗑️";
+  if (a.includes("changed") || a.includes("guest")) return "✏️";
+  return "📅";
+}
+
+function cleanEventContext(context) {
+  // Remove any leading emoji or symbols (up to 2 chars + space)
+  return context.replace(/^[^\w\d\s]{1,2}\s*/, '');
+}
+
+
 
 
   // 🛠️ ✅ Important: Only call calendars after JWT confirmed and server is ready
