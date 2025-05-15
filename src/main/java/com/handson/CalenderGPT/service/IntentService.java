@@ -53,6 +53,15 @@ public class IntentService {
                         "Use these time references when interpreting phrases: today = " + today + ", tomorrow = " + tomorrow + ", next week = " + nextWeek + ". " +
                         "If a date does not include a year, use the current year if the date is still upcoming, otherwise use the next year. " +
                         "If a date includes a past year, adjust it to the next valid future occurrence by adding one year. " +
+                        "EXAMPLES:  \n" +
+                        "        Text: \"What's on my calendar tomorrow?\"  \n" +
+                        "        → {\"intent\":\"VIEW\",\"summary\":\"\",\"description\":\"\",\"start\":\"2025-05-16T00:00:00.000Z\",\"end\":\"2025-05-16T23:59:59.000Z\",\"location\":\"\"}  \n" +
+                        "\n" +
+                        "        Text: \"List events in April\"  \n" +
+                        "        → {\"intent\":\"VIEW\",\"summary\":\"\",\"description\":\"\",\"start\":\"2025-04-01T00:00:00.000Z\",\"end\":\"2025-04-30T23:59:59.000Z\",\"location\":\"\"}  \n" +
+                        "\n" +
+                        "        Text: \"Tell me a joke\"  \n" +
+                        "        → {\"intent\":\"NONE\",\"message\":\"Sure, here's one...\"}  "+
 
                         // 🧠 Not an event? Return NONE
                         "If the request is not related to an event (e.g., a song, story, poem), return {\"intent\": \"NONE\", \"message\": \"response text\"}. " +
