@@ -36,13 +36,18 @@ public class EventResponseBuilder {
 
     public String buildNoEventsFound(String start, String end) {
         try {
+            // Truncate timestamps to only the date portion (first 10 chars = yyyy-MM-dd)
+            String simpleStart = start.length() >= 10 ? start.substring(0, 10) : start;
+            String simpleEnd = end.length() >= 10 ? end.substring(0, 10) : end;
+
             return new ObjectMapper().writeValueAsString(List.of(
-                    Map.of("role", "ai", "content", "📭 No events found between " + start + " and " + end + ".")
+                    Map.of("role", "ai", "content", "📭 No events found between " + simpleStart + " and " + simpleEnd + ".")
             ));
         } catch (Exception e) {
             return buildFallbackMessage("No events found.");
         }
     }
+
 
     public String buildEventList(List<Map<String, String>> events, String calendarId) {
         try {

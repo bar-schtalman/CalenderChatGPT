@@ -3,7 +3,7 @@ body {
 }
 
 .chat-container {
-  max-width: 800px;
+  max-width: 1200px;
   margin: 50px auto;
   background: #fff;
   border-radius: 10px;
@@ -30,14 +30,17 @@ body {
 }
 
 .message.user {
-  background-color: #dcf8c6;
+  background-color: #007bff;
+  color: white;
   float: right;
 }
 
-.message.ai, .message.assistant {
-  background-color: #eee;
+.message.assistant {
+  background-color: #e9ecef;
+  color: #212529;
   float: left;
 }
+
 
 .clear {
   clear: both;
@@ -180,5 +183,34 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   border: 1px solid #ccc;
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 5px;
+  padding-left: 10px;
+  margin-bottom: 12px;
+}
+
+.typing-indicator .dot {
+  width: 8px;
+  height: 8px;
+  background: #999;
+  border-radius: 50%;
+  animation: blink 1.2s infinite ease-in-out;
+  opacity: 0.5;
+}
+
+.typing-indicator .dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator .dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes blink {
+  0%, 100% { transform: translateY(0); opacity: 0.3; }
+  50% { transform: translateY(-4px); opacity: 1; }
 }
 

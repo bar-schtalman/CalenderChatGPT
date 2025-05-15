@@ -100,6 +100,10 @@ $(document).ready(() => {
 
     appendMessage("user", message);
     $("#chatInput").val("");
+    $("#chatInput").prop("disabled", true);
+    $("#chatForm button[type=submit]").prop("disabled", true);
+    showTypingIndicator();
+
 
 $.ajax({
   url: "/chat/message",
@@ -110,6 +114,11 @@ $.ajax({
   },
   data: JSON.stringify(message),
   success: (response) => {
+    removeTypingIndicator();
+    $("#chatInput").prop("disabled", false).focus();;
+    $("#chatForm button[type=submit]").prop("disabled", false);
+
+
     const parsed = JSON.parse(response);
 
     parsed.forEach((msg) => {
@@ -144,6 +153,11 @@ $.ajax({
 
 
       error: (xhr) => {
+      $("#chatInput").prop("disabled", false).focus();;
+      $("#chatForm button[type=submit]").prop("disabled", false);
+
+      removeTypingIndicator();
+
         console.error("❌ Chat API error:", xhr.responseText);
         appendMessage("ai", "❌ Error contacting server");
       }
@@ -197,4 +211,28 @@ $("#showActivityBtn").on("click", function () {
       alert("❌ Cannot contact server. Please login again.");
     }
   });
+
 });
+
+function showTypingIndicator() {
+  const typing = document.createElement("div");
+  typing.className = "message assistant typing-indicator";
+  typing.innerHTML = `
+    <span class="dot"></span>
+    <span class="dot"></span>
+    <span class="dot"></span>
+  `;
+  document.getElementById("chatWindow").appendChild(typing);
+  scrollChatToBottom();
+}
+
+function removeTypingIndicator() {
+  const indicators = document.querySelectorAll('.typing-indicator');
+  indicators.forEach(el => el.remove());
+}
+
+function scrollChatToBottom() {
+  const chatWindow = document.getElementById("chatWindow");
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
