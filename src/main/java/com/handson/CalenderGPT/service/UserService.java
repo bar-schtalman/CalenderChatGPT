@@ -1,17 +1,17 @@
 package com.handson.CalenderGPT.service;
 
 import com.google.api.services.calendar.Calendar;
+import com.handson.CalenderGPT.google.calendar.GoogleCalendarProvider;
 import com.handson.CalenderGPT.jwt.JwtTokenUtil;
 import com.handson.CalenderGPT.model.User;
-import com.handson.CalenderGPT.google.calendar.GoogleCalendarProvider;
 import com.handson.CalenderGPT.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.stereotype.Service;
-import java.util.Map;
 
 import java.time.Instant;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -20,25 +20,23 @@ public class UserService {
     private final GoogleCalendarProvider calendarProvider;
     private final JwtTokenUtil jwtUtil;
 
-    public User handleOAuthLogin(OAuth2AuthenticationToken oauthToken,
-                                 OAuth2AuthorizedClient client) {
+    public User handleOAuthLogin(OAuth2AuthenticationToken oauthToken, OAuth2AuthorizedClient client) {
         // 1. Extract attributes
-        Map<String,Object> attrs = oauthToken.getPrincipal().getAttributes();
-        String email    = (String) attrs.get("email");
+        Map<String, Object> attrs = oauthToken.getPrincipal().getAttributes();
+        String email = (String) attrs.get("email");
         String fullName = (String) attrs.get("name");
-        String first    = (String) attrs.getOrDefault("given_name", fullName);
-        String last     = (String) attrs.getOrDefault("family_name", "");
+        String first = (String) attrs.getOrDefault("given_name", fullName);
+        String last = (String) attrs.getOrDefault("family_name", "");
 
         // 2. Find or create
-        User user = repo.findByEmail(email)
-                .orElseGet(() -> {
-                    User u = new User();
-                    u.setEmail(email);
-                    u.setFullName(fullName);
-                    u.setFirstName(first);
-                    u.setLastName(last);
-                    return u;
-                });
+        User user = repo.findByEmail(email).orElseGet(() -> {
+            User u = new User();
+            u.setEmail(email);
+            u.setFullName(fullName);
+            u.setFirstName(first);
+            u.setLastName(last);
+            return u;
+        });
         user.setJwtIssuedAt(Instant.now());
 
         // 3. Store refresh token
@@ -63,7 +61,7 @@ public class UserService {
                 }
             }
         } catch (Exception e) {
-            // log.warn("Failed to fetch default calendar", e);
+            //log.warn("Failed to fetch default calendar", e);
         }
         return null;
     }

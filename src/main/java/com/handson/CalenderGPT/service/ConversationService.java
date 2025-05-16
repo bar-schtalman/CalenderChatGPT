@@ -13,7 +13,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -100,7 +103,7 @@ public class ConversationService {
         try {
             String start = details.get("start").asText();
             String end = details.get("end").asText();
-            List<Map<String,String>> events = eventService.getEventsInDateRange(calendarId, start, end, user);
+            List<Map<String, String>> events = eventService.getEventsInDateRange(calendarId, start, end, user);
             if (events.isEmpty()) {
                 return eventResponseBuilder.buildNoEventsFound(start, end);
             }

@@ -26,7 +26,7 @@ public class EventHistory {
     private String calendarId;
     private String eventId;
 
-    private String action; // CREATE, UPDATE, DELETE
+    private String action;
 
     @Column(columnDefinition = "TEXT")
     private String oldData;

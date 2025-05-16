@@ -2,9 +2,8 @@ package com.handson.CalenderGPT.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.theokanning.openai.completion.chat.ChatMessage;
 import com.theokanning.openai.completion.chat.ChatCompletionResult;
-import org.springframework.beans.factory.annotation.Value;
+import com.theokanning.openai.completion.chat.ChatMessage;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -35,40 +34,22 @@ public class IntentService {
         LocalDate tomorrow = today.plusDays(1);
         LocalDate nextWeek = today.plusWeeks(1);
 
-        String extractionPrompt =
-                "Analyze the following text and determine if it represents an event-related request (Create, Edit, Delete, View). " +
-                        "If it is event-related, return a structured JSON object with the following fields: " +
-                        "\"intent\" (CREATE, EDIT, DELETE, VIEW), " +
-                        "\"summary\", \"description\", \"start\", \"end\", \"location\". " +
+        String extractionPrompt = "Analyze the following text and determine if it represents an event-related request (Create, Edit, Delete, View). " + "If it is event-related, return a structured JSON object with the following fields: " + "\"intent\" (CREATE, EDIT, DELETE, VIEW), " + "\"summary\", \"description\", \"start\", \"end\", \"location\". " +
 
-                        // Format enforcement
-                        "Ensure both \"start\" and \"end\" are in full ISO 8601 format with milliseconds and Z (e.g., 2025-04-09T15:00:00.000Z). " +
+                // Format enforcement
+                "Ensure both \"start\" and \"end\" are in full ISO 8601 format with milliseconds and Z (e.g., 2025-04-09T15:00:00.000Z). " +
 
-                        // ⚠️ Main Rule: only default when start is present
-                        "IMPORTANT: For ALL intents, if \"start\" is provided but \"end\" is missing, set \"end\" to 1 hour after \"start\". " +
-                        "If \"start\" is not provided at all, leave both \"start\" and \"end\" as empty strings (\"\"). " +
-                        "Do NOT assume a full day or any default times based on the intent. " +
+                // ⚠️ Main Rule: only default when start is present
+                "IMPORTANT: For ALL intents, if \"start\" is provided but \"end\" is missing, set \"end\" to 1 hour after \"start\". " + "If \"start\" is not provided at all, leave both \"start\" and \"end\" as empty strings (\"\"). " + "Do NOT assume a full day or any default times based on the intent. " +
 
-                        // 🗓️ Natural date handling
-                        "Use these time references when interpreting phrases: today = " + today + ", tomorrow = " + tomorrow + ", next week = " + nextWeek + ". " +
-                        "If a date does not include a year, use the current year if the date is still upcoming, otherwise use the next year. " +
-                        "If a date includes a past year, adjust it to the next valid future occurrence by adding one year. " +
-                        "EXAMPLES:  \n" +
-                        "        Text: \"What's on my calendar tomorrow?\"  \n" +
-                        "        → {\"intent\":\"VIEW\",\"summary\":\"\",\"description\":\"\",\"start\":\"2025-05-16T00:00:00.000Z\",\"end\":\"2025-05-16T23:59:59.000Z\",\"location\":\"\"}  \n" +
-                        "\n" +
-                        "        Text: \"List events in April\"  \n" +
-                        "        → {\"intent\":\"VIEW\",\"summary\":\"\",\"description\":\"\",\"start\":\"2025-04-01T00:00:00.000Z\",\"end\":\"2025-04-30T23:59:59.000Z\",\"location\":\"\"}  \n" +
-                        "\n" +
-                        "        Text: \"Tell me a joke\"  \n" +
-                        "        → {\"intent\":\"NONE\",\"message\":\"Sure, here's one...\"}  "+
+                // 🗓️ Natural date handling
+                "Use these time references when interpreting phrases: today = " + today + ", tomorrow = " + tomorrow + ", next week = " + nextWeek + ". " + "If a date does not include a year, use the current year if the date is still upcoming, otherwise use the next year. " + "If a date includes a past year, adjust it to the next valid future occurrence by adding one year. " + "EXAMPLES:  \n" + "        Text: \"What's on my calendar tomorrow?\"  \n" + "        → {\"intent\":\"VIEW\",\"summary\":\"\",\"description\":\"\",\"start\":\"2025-05-16T00:00:00.000Z\",\"end\":\"2025-05-16T23:59:59.000Z\",\"location\":\"\"}  \n" + "\n" + "        Text: \"List events in April\"  \n" + "        → {\"intent\":\"VIEW\",\"summary\":\"\",\"description\":\"\",\"start\":\"2025-04-01T00:00:00.000Z\",\"end\":\"2025-04-30T23:59:59.000Z\",\"location\":\"\"}  \n" + "\n" + "        Text: \"Tell me a joke\"  \n" + "        → {\"intent\":\"NONE\",\"message\":\"Sure, here's one...\"}  " +
 
-                        // 🧠 Not an event? Return NONE
-                        "If the request is not related to an event (e.g., a song, story, poem), return {\"intent\": \"NONE\", \"message\": \"response text\"}. " +
+                // 🧠 Not an event? Return NONE
+                "If the request is not related to an event (e.g., a song, story, poem), return {\"intent\": \"NONE\", \"message\": \"response text\"}. " +
 
-                        // ✅ Output
-                        "Respond only with raw JSON — no markdown, no extra text, and no formatting. " +
-                        "Text: \"" + prompt + "\"";
+                // ✅ Output
+                "Respond only with raw JSON — no markdown, no extra text, and no formatting. " + "Text: \"" + prompt + "\"";
 
 
         List<ChatMessage> messages = new ArrayList<>();

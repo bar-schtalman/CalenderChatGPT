@@ -28,19 +28,17 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     private UserRepository userRepository;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         String token = null;
 
-        // 🟢 FIRST: Look for Bearer token in Authorization header
+        //  FIRST: Look for Bearer token in Authorization header
         String authHeader = request.getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
-            System.out.println("Received JWT Token: " + token);  // Log the token
+
         }
 
-        // 🔵 THEN: Optionally check cookies (if you still want to support them)
+
         if (token == null && request.getCookies() != null) {
             for (Cookie cookie : request.getCookies()) {
                 if ("AUTH_TOKEN".equals(cookie.getName())) {
@@ -50,7 +48,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             }
         }
 
-        // 🟣 If token found, try to validate and authenticate
+        // If token found, try to validate and authenticate
         try {
             if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UUID userId = jwtTokenUtil.getUserIdFromToken(token);
@@ -58,8 +56,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
                 if (user != null) {
                     // Set the user authentication token for JWT
-                    UsernamePasswordAuthenticationToken jwtAuthToken =
-                            new UsernamePasswordAuthenticationToken(user, null, null);
+                    UsernamePasswordAuthenticationToken jwtAuthToken = new UsernamePasswordAuthenticationToken(user, null, null);
 
                     // Get existing OAuth2 token from the SecurityContext (if available)
                     Authentication existingOAuth2Auth = SecurityContextHolder.getContext().getAuthentication();
@@ -68,7 +65,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                         SecurityContextHolder.getContext().setAuthentication(existingOAuth2Auth); // Keep OAuth2 token
                     }
 
-                    // Now set the JWT token as authentication
+
                     SecurityContextHolder.getContext().setAuthentication(jwtAuthToken);
                 }
             }
@@ -76,7 +73,6 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             logger.warn("JWT auth failed: " + ex.getMessage());
         }
 
-        // Continue with the filter chain
         filterChain.doFilter(request, response);
     }
 

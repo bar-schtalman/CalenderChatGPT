@@ -95,10 +95,7 @@ public class EventController {
 
     @GetMapping("/history")
     public List<EventHistoryDTO> getUserEventHistory(@AuthenticationPrincipal User user) {
-        List<EventHistory> histories = eventHistoryRepository.findByUserIdOrderByTimestampDesc(user.getId())
-                .stream()
-                .limit(20)
-                .toList();
+        List<EventHistory> histories = eventHistoryRepository.findByUserIdOrderByTimestampDesc(user.getId()).stream().limit(20).toList();
 
         return eventHistoryService.formatEventHistories(histories);
     }

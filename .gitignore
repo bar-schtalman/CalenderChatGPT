@@ -45,3 +45,4 @@ Thumbs.db
 application-secret.properties
 *.env
 
+*.json

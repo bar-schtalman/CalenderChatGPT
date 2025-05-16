@@ -26,10 +26,10 @@ public class PendingEventState {
      * Merge values from another state, but only fill in fields that are still blank.
      */
     public void mergeFrom(PendingEventState update) {
-        if (this.summary.isEmpty())       this.summary = update.summary;
-        if (this.start.isEmpty())         this.start       = update.start;
-        if (this.end.isEmpty())           this.end         = update.end;
-        if (this.location.isEmpty())      this.location    = update.location;
-        if (this.description.isEmpty())   this.description = update.description;
+        if (this.summary.isEmpty()) this.summary = update.summary;
+        if (this.start.isEmpty()) this.start = update.start;
+        if (this.end.isEmpty()) this.end = update.end;
+        if (this.location.isEmpty()) this.location = update.location;
+        if (this.description.isEmpty()) this.description = update.description;
     }
 }

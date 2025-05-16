@@ -9,7 +9,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 
-
 @Data
 @Builder
 @NoArgsConstructor
@@ -18,14 +17,12 @@ import java.util.List;
 public class Event {
 
     private String id;
-    private String summary;       // e.g., "Team Meeting"
-    private String description;   // optional: "Discuss project status"
-    private String location;      // optional: "Zoom, Office, etc."
-    private LocalDateTime start;  // or a String if you prefer
-    private LocalDateTime end;    // or a String if you prefer
+    private String summary;
+    private String description;
+    private String location;
+    private LocalDateTime start;
+    private LocalDateTime end;
     private List<String> guests;
-    private String timeZone;      // ✅ Added time zone
-
-    // Getters and setters
+    private String timeZone;
 
 }

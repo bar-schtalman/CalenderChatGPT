@@ -9,10 +9,7 @@ public class StaticResourceConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        registry
-                .addResourceHandler("/**")
-                .addResourceLocations("classpath:/static/")
-                .setCachePeriod(0); // No caching in dev
+        registry.addResourceHandler("/**").addResourceLocations("classpath:/static/").setCachePeriod(0); // No caching in dev
 
     }
 }

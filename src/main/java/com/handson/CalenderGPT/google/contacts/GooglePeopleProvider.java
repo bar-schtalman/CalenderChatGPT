@@ -1,20 +1,14 @@
 package com.handson.CalenderGPT.google.contacts;
 
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.http.HttpRequestInitializer;
+import com.google.api.client.http.HttpTransport;
+import com.google.api.client.json.JsonFactory;
+import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.people.v1.PeopleService;
-import com.google.api.services.people.v1.PeopleServiceScopes;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.stereotype.Component;
-//import org.springframework.web.reactive.function.client.WebClient;
-
-import java.util.Collections;
-
-import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
-import com.google.api.client.json.jackson2.JacksonFactory;
-import com.google.api.client.http.HttpTransport;
-import com.google.api.client.json.JsonFactory;
-import com.google.api.client.http.HttpRequestInitializer;
-import com.google.api.client.http.HttpRequest;
 
 @Component
 public class GooglePeopleProvider {
@@ -31,8 +25,6 @@ public class GooglePeopleProvider {
             request.getHeaders().setAuthorization("Bearer " + accessToken.getTokenValue());
         };
 
-        return new PeopleService.Builder(httpTransport, jsonFactory, requestInitializer)
-                .setApplicationName(APPLICATION_NAME)
-                .build();
+        return new PeopleService.Builder(httpTransport, jsonFactory, requestInitializer).setApplicationName(APPLICATION_NAME).build();
     }
 }

@@ -2,11 +2,11 @@ package com.handson.CalenderGPT.controller;
 
 import com.google.api.services.calendar.model.CalendarListEntry;
 import com.handson.CalenderGPT.context.CalendarContext;
+import com.handson.CalenderGPT.google.calendar.GoogleCalendarService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import com.handson.CalenderGPT.google.calendar.GoogleCalendarService;
 
 import java.io.IOException;
 import java.util.List;
@@ -24,16 +24,6 @@ public class CalendarController {
     public CalendarController(GoogleCalendarService googleCalendarService, CalendarContext calendarContext) {
         this.googleCalendarService = googleCalendarService;
         this.calendarContext = calendarContext;
-        /*
-        // Set the default calendar ID at application start
-        try {
-            Map<String, String> defaultCalendar = googleCalendarService.getDefaultCalendarDetails();
-            //this.calendarContext.setCalendarId(defaultCalendar.get("id"));
-        } catch (IOException e) {
-            e.printStackTrace();
-            // Handle case where default calendar is not found
-        }
-        */
     }
 
     @GetMapping

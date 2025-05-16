@@ -1,14 +1,12 @@
 package com.handson.CalenderGPT.google.oauth;
 
+import com.handson.CalenderGPT.context.CalendarContext;
 import com.handson.CalenderGPT.model.User;
 import com.handson.CalenderGPT.service.UserService;
-import com.handson.CalenderGPT.context.CalendarContext;
-
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
@@ -30,20 +28,15 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
     private final CalendarContext calendarContext;
 
     @Override
-    public void onAuthenticationSuccess(HttpServletRequest request,
-                                        HttpServletResponse response,
-                                        Authentication authentication) throws IOException {
+    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException {
 
         if (!(authentication instanceof OAuth2AuthenticationToken oauthToken)) {
             response.sendError(SC_UNAUTHORIZED, "Authentication failed");
             return;
         }
 
-        // Load the authorized client (contains access & refresh tokens)
-        OAuth2AuthorizedClient client = clientService.loadAuthorizedClient(
-                oauthToken.getAuthorizedClientRegistrationId(),
-                oauthToken.getName()
-        );
+
+        OAuth2AuthorizedClient client = clientService.loadAuthorizedClient(oauthToken.getAuthorizedClientRegistrationId(), oauthToken.getName());
         if (client == null || client.getAccessToken() == null) {
             response.sendError(SC_UNAUTHORIZED, "Missing authorized client");
             return;

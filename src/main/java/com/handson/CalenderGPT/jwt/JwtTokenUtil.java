@@ -1,9 +1,7 @@
 package com.handson.CalenderGPT.jwt;
 
 import io.jsonwebtoken.*;
-import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -38,10 +36,7 @@ public class JwtTokenUtil {
         // Load private key (PKCS#8 PEM format)
         try (InputStream in = getClass().getResourceAsStream(privateKeyPath)) {
             byte[] keyBytes = in.readAllBytes();
-            String keyPEM = new String(keyBytes)
-                    .replace("-----BEGIN PRIVATE KEY-----", "")
-                    .replace("-----END PRIVATE KEY-----", "")
-                    .replaceAll("\n", "");
+            String keyPEM = new String(keyBytes).replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "").replaceAll("\n", "");
             byte[] decoded = Base64.getDecoder().decode(keyPEM);
             PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);
             KeyFactory keyFactory = KeyFactory.getInstance("RSA");
@@ -51,10 +46,7 @@ public class JwtTokenUtil {
         // Load public key (X.509 PEM format)
         try (InputStream in = getClass().getResourceAsStream(publicKeyPath)) {
             byte[] keyBytes = in.readAllBytes();
-            String keyPEM = new String(keyBytes)
-                    .replace("-----BEGIN PUBLIC KEY-----", "")
-                    .replace("-----END PUBLIC KEY-----", "")
-                    .replaceAll("\n", "");
+            String keyPEM = new String(keyBytes).replace("-----BEGIN PUBLIC KEY-----", "").replace("-----END PUBLIC KEY-----", "").replaceAll("\n", "");
             byte[] decoded = Base64.getDecoder().decode(keyPEM);
             X509EncodedKeySpec keySpec = new X509EncodedKeySpec(decoded);
             KeyFactory keyFactory = KeyFactory.getInstance("RSA");
@@ -66,22 +58,11 @@ public class JwtTokenUtil {
         Instant now = Instant.now();
         Instant exp = now.plusSeconds(expirationMinutes * 60);
 
-        return Jwts.builder()
-                .setSubject(userId.toString())
-                .claim("email", email)
-                .claim("name", fullName)
-                .setIssuedAt(Date.from(now))
-                .setExpiration(Date.from(exp))
-                .setId(UUID.randomUUID().toString())
-                .signWith(privateKey, SignatureAlgorithm.RS256)
-                .compact();
+        return Jwts.builder().setSubject(userId.toString()).claim("email", email).claim("name", fullName).setIssuedAt(Date.from(now)).setExpiration(Date.from(exp)).setId(UUID.randomUUID().toString()).signWith(privateKey, SignatureAlgorithm.RS256).compact();
     }
 
     public Jws<Claims> validateToken(String token) throws JwtException {
-        return Jwts.parserBuilder()
-                .setSigningKey(publicKey)
-                .build()
-                .parseClaimsJws(token);
+        return Jwts.parserBuilder().setSigningKey(publicKey).build().parseClaimsJws(token);
     }
 
     public UUID getUserIdFromToken(String token) {

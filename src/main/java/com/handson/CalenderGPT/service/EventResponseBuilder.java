@@ -6,7 +6,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class EventResponseBuilder {
@@ -19,16 +21,7 @@ public class EventResponseBuilder {
 
     public String buildEventCardResponse(com.handson.CalenderGPT.model.Event event, Map<String, String> created) {
         try {
-            return new ObjectMapper().writeValueAsString(List.of(Map.of(
-                    "role", "event",
-                    "summary", event.getSummary(),
-                    "date", event.getStart().toLocalDate().toString(),
-                    "time", event.getStart().toLocalTime().toString() + " - " + event.getEnd().toLocalTime().toString(),
-                    "calendarId", calendarContext.getCalendarId(),
-                    "id", created.getOrDefault("id", ""),
-                    "guests", created.getOrDefault("guests", ""),
-                    "location", event.getLocation() != null ? event.getLocation() : ""
-            )));
+            return new ObjectMapper().writeValueAsString(List.of(Map.of("role", "event", "summary", event.getSummary(), "date", event.getStart().toLocalDate().toString(), "time", event.getStart().toLocalTime().toString() + " - " + event.getEnd().toLocalTime().toString(), "calendarId", calendarContext.getCalendarId(), "id", created.getOrDefault("id", ""), "guests", created.getOrDefault("guests", ""), "location", event.getLocation() != null ? event.getLocation() : "")));
         } catch (Exception e) {
             return buildFallbackMessage(event.getSummary());
         }
@@ -36,13 +29,11 @@ public class EventResponseBuilder {
 
     public String buildNoEventsFound(String start, String end) {
         try {
-            // Truncate timestamps to only the date portion (first 10 chars = yyyy-MM-dd)
+
             String simpleStart = start.length() >= 10 ? start.substring(0, 10) : start;
             String simpleEnd = end.length() >= 10 ? end.substring(0, 10) : end;
 
-            return new ObjectMapper().writeValueAsString(List.of(
-                    Map.of("role", "ai", "content", "📭 No events found between " + simpleStart + " and " + simpleEnd + ".")
-            ));
+            return new ObjectMapper().writeValueAsString(List.of(Map.of("role", "ai", "content", "📭 No events found between " + simpleStart + " and " + simpleEnd + ".")));
         } catch (Exception e) {
             return buildFallbackMessage("No events found.");
         }
@@ -53,16 +44,7 @@ public class EventResponseBuilder {
         try {
             List<Map<String, String>> responseList = new ArrayList<>();
             for (Map<String, String> event : events) {
-                responseList.add(Map.of(
-                        "role", "event",
-                        "summary", event.get("summary"),
-                        "date", event.get("start").split(" ")[0],
-                        "time", event.get("start").split(" ")[1] + " - " + event.get("end").split(" ")[1],
-                        "location", event.getOrDefault("location", "No location"),
-                        "calendarId", calendarId,
-                        "id", event.get("id"),
-                        "guests", event.getOrDefault("guests", "")
-                ));
+                responseList.add(Map.of("role", "event", "summary", event.get("summary"), "date", event.get("start").split(" ")[0], "time", event.get("start").split(" ")[1] + " - " + event.get("end").split(" ")[1], "location", event.getOrDefault("location", "No location"), "calendarId", calendarId, "id", event.get("id"), "guests", event.getOrDefault("guests", "")));
             }
             return new ObjectMapper().writeValueAsString(responseList);
         } catch (Exception e) {
@@ -76,8 +58,7 @@ public class EventResponseBuilder {
 
     public String formatDisplayDate(String isoDateTime) {
         try {
-            return LocalDate.parse(isoDateTime.substring(0, 10))
-                    .format(DateTimeFormatter.ofPattern("dd MMMM yyyy"));
+            return LocalDate.parse(isoDateTime.substring(0, 10)).format(DateTimeFormatter.ofPattern("dd MMMM yyyy"));
         } catch (Exception e) {
             return isoDateTime;
         }

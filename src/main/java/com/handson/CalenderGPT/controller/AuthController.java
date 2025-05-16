@@ -1,6 +1,7 @@
 package com.handson.CalenderGPT.controller;
 
 import com.handson.CalenderGPT.model.User;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -8,8 +9,8 @@ import org.springframework.security.oauth2.client.authentication.OAuth2Authentic
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import jakarta.servlet.http.HttpSession;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 @RestController
 public class AuthController {

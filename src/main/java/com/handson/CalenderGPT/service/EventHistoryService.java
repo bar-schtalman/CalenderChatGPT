@@ -1,8 +1,8 @@
 package com.handson.CalenderGPT.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.handson.CalenderGPT.model.EventHistory;
 import com.handson.CalenderGPT.dto.EventHistoryDTO;
+import com.handson.CalenderGPT.model.EventHistory;
 import org.springframework.stereotype.Service;
 
 import java.time.format.DateTimeFormatter;
@@ -32,13 +32,9 @@ public class EventHistoryService {
             Map<String, Object> oldData = history.getOldData() != null ? objectMapper.readValue(history.getOldData(), Map.class) : null;
             Map<String, Object> newData = history.getNewData() != null ? objectMapper.readValue(history.getNewData(), Map.class) : null;
 
-            String eventTitle = (newData != null && newData.containsKey("summary")) ? newData.get("summary").toString() :
-                    (oldData != null && oldData.containsKey("summary")) ? oldData.get("summary").toString() :
-                            "Unknown Event";
+            String eventTitle = (newData != null && newData.containsKey("summary")) ? newData.get("summary").toString() : (oldData != null && oldData.containsKey("summary")) ? oldData.get("summary").toString() : "Unknown Event";
 
-            String eventDate = (newData != null && newData.containsKey("date")) ? newData.get("date").toString() :
-                    (oldData != null && oldData.containsKey("date")) ? oldData.get("date").toString() :
-                            "Unknown Date";
+            String eventDate = (newData != null && newData.containsKey("date")) ? newData.get("date").toString() : (oldData != null && oldData.containsKey("date")) ? oldData.get("date").toString() : "Unknown Date";
 
             String eventContext = "📅 " + eventTitle + " at " + eventDate;
 

@@ -4,14 +4,17 @@ import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.CalendarList;
 import com.google.api.services.calendar.model.CalendarListEntry;
 import com.handson.CalenderGPT.context.CalendarContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
-import java.util.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class GoogleCalendarService {
@@ -25,16 +28,13 @@ public class GoogleCalendarService {
         this.calendarContext = calendarContext;
     }
 
-    // This function now correctly uses OAuth2AuthorizedClient.
+
     private Calendar getCalendarClient() throws GeneralSecurityException, IOException {
         OAuth2AuthorizedClient client = calendarContext.getAuthorizedClient();
         if (client == null) {
-            logger.error("OAuth2AuthorizedClient is null. User is not authenticated with Google.");
             throw new IllegalStateException("User is not authenticated with Google.");
         }
 
-        // Logging the client access token for debugging purposes
-        logger.info("OAuth2AuthorizedClient found. Access token: {}", client.getAccessToken().getTokenValue());
 
         return calendarProvider.getCalendarClient(client);
     }
@@ -65,9 +65,7 @@ public class GoogleCalendarService {
     }
 
     public String createCalendar(String summary) throws IOException, GeneralSecurityException {
-        com.google.api.services.calendar.model.Calendar calendar = new com.google.api.services.calendar.model.Calendar()
-                .setSummary(summary)
-                .setTimeZone("UTC");
+        com.google.api.services.calendar.model.Calendar calendar = new com.google.api.services.calendar.model.Calendar().setSummary(summary).setTimeZone("UTC");
 
         com.google.api.services.calendar.model.Calendar createdCalendar = getCalendarClient().calendars().insert(calendar).execute();
 
