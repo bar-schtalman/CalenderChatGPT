@@ -1,7 +1,7 @@
 // 🔐 Include Authorization header
 function authHeader() {
   const token = localStorage.getItem("AUTH_TOKEN");
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 let currentEditingEvent = null;
@@ -27,7 +27,7 @@ function openEditModal(event) {
     },
     error: function (xhr) {
       alert("❌ Failed to fetch event: " + xhr.responseText);
-    }
+    },
   });
 }
 
@@ -47,7 +47,7 @@ $("#saveEdit").click(() => {
     location: "",
     start,
     end,
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
 
   $.ajax({
@@ -76,21 +76,21 @@ $("#saveEdit").click(() => {
         },
         error: (xhr) => {
           console.error("❌ Failed to fetch updated event:", xhr.responseText);
-        }
+        },
       });
     },
     error: (xhr) => {
       alert("❌ Update failed: " + xhr.responseText);
-    }
+    },
   });
 });
 
 function formatDateForInput(dateStr) {
-  if (!dateStr) return '';
+  if (!dateStr) return "";
   const [day, month, year] = dateStr.split("-");
   return `${year}-${month}-${day}`;
 }
 
 function formatTimeForInput(timeStr) {
-  return timeStr || '';
+  return timeStr || "";
 }

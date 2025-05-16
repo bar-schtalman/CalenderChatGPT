@@ -2,7 +2,7 @@
 function authHeader() {
   const token = localStorage.getItem("AUTH_TOKEN");
   console.log("JWT Token: ", token);
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 // 🧠 Send message to chat API
@@ -20,10 +20,10 @@ function sendChatMessage(message, onSuccess, onError) {
     headers: authHeader(),
     data: {
       prompt: message,
-      userId: userId
+      userId: userId,
     },
     success: onSuccess,
-    error: onError
+    error: onError,
   });
 }
 
@@ -34,7 +34,7 @@ function deleteEvent(calendarId, eventId, element, onSuccess, onError) {
     method: "DELETE",
     headers: authHeader(),
     success: () => onSuccess(element),
-    error: onError
+    error: onError,
   });
 }
 
@@ -47,21 +47,21 @@ function updateEvent(calendarId, eventId, eventData, onSuccess, onError) {
     contentType: "application/json",
     data: JSON.stringify(eventData),
     success: onSuccess,
-    error: onError
+    error: onError,
   });
 }
 
 // 🙋 Fetch current authenticated user
-fetch('/api/me', {
-  headers: authHeader()
+fetch("/api/me", {
+  headers: authHeader(),
 })
-  .then(res => {
+  .then((res) => {
     if (!res.ok) {
       throw new Error("Unauthorized");
     }
     return res.json();
   })
-  .then(user => {
-    sessionStorage.setItem('userId', user.id);
+  .then((user) => {
+    sessionStorage.setItem("userId", user.id);
   })
   .catch(() => console.error("🔴 Couldn't fetch user session"));

@@ -1,19 +1,17 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-    <meta charset="UTF-8">
+  <head>
+    <meta charset="UTF-8" />
     <title>Welcome</title>
-    <link rel="stylesheet" href="/styles.css" th:href="@{/styles.css}">
-</head>
-<body>
-
-<div class="chat-container text-center">
-    <h1>Welcome to Calendar Chat</h1>
-    <p>Log in with Google to access your calendar.</p>
-    <a href="/oauth2/authorization/google">
+    <link rel="stylesheet" href="/styles.css" th:href="@{/styles.css}" />
+  </head>
+  <body>
+    <div class="chat-container text-center">
+      <h1>Welcome to Calendar Chat</h1>
+      <p>Log in with Google to access your calendar.</p>
+      <a href="/oauth2/authorization/google">
         <button id="authorizeButton">Login with Google</button>
-    </a>
-</div>
-
-</body>
+      </a>
+    </div>
+  </body>
 </html>

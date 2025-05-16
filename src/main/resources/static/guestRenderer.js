@@ -1,7 +1,7 @@
 // 🔐 Auth helper
 function authHeader() {
   const token = localStorage.getItem("AUTH_TOKEN");
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 let currentEventForGuest = null;
@@ -13,17 +13,23 @@ function openGuestModal(event) {
     return;
   }
   currentEventForGuest = event;
-  $('#guestEmails').val('');
-  $('#guestModal').modal('show');
+  $("#guestEmails").val("");
+  $("#guestModal").modal("show");
 }
 
 // Save new guests
-$('#saveGuestsBtn').on('click', () => {
-  const guestEmails = $('#guestEmails').val().split(',')
-    .map(e => e.trim())
-    .filter(e => e);
+$("#saveGuestsBtn").on("click", () => {
+  const guestEmails = $("#guestEmails")
+    .val()
+    .split(",")
+    .map((e) => e.trim())
+    .filter((e) => e);
 
-  if (!currentEventForGuest || !currentEventForGuest.id || guestEmails.length === 0) {
+  if (
+    !currentEventForGuest ||
+    !currentEventForGuest.id ||
+    guestEmails.length === 0
+  ) {
     alert("Please enter at least one valid email.");
     return;
   }
@@ -35,12 +41,14 @@ $('#saveGuestsBtn').on('click', () => {
     contentType: "application/json",
     data: JSON.stringify(guestEmails),
     success: function (updatedEvent) {
-      $('#guestModal').modal('hide');
-      $(`#event-${updatedEvent.id}`).replaceWith(window.renderEventCard(updatedEvent));
+      $("#guestModal").modal("hide");
+      $(`#event-${updatedEvent.id}`).replaceWith(
+        window.renderEventCard(updatedEvent),
+      );
     },
     error: function (xhr) {
       alert("Failed to add guests: " + xhr.responseText);
-    }
+    },
   });
 });
 
@@ -58,11 +66,13 @@ $(document).on("click", ".remove-guest-btn", function () {
     contentType: "application/json",
     data: JSON.stringify([email]),
     success: function (updatedEvent) {
-      $(`#event-${updatedEvent.id}`).replaceWith(window.renderEventCard(updatedEvent));
+      $(`#event-${updatedEvent.id}`).replaceWith(
+        window.renderEventCard(updatedEvent),
+      );
     },
     error: function (xhr) {
       alert("Failed to remove guest: " + xhr.responseText);
-    }
+    },
   });
 });
 
@@ -94,16 +104,18 @@ $(document).ready(function () {
           data: { query: term },
           success: function (data) {
             console.log("📨 Contacts data returned from server:", data);
-            response($.map(data, function (item) {
-              return {
-                label: `${item.name} <${item.email}>`,
-                value: item.email
-              };
-            }));
+            response(
+              $.map(data, function (item) {
+                return {
+                  label: `${item.name} <${item.email}>`,
+                  value: item.email,
+                };
+              }),
+            );
           },
           error: function (xhr) {
             console.error("❌ Failed to fetch contacts:", xhr.responseText);
-          }
+          },
         });
       },
       focus: function () {
@@ -116,7 +128,7 @@ $(document).ready(function () {
         terms.push("");
         this.value = terms.join(", ");
         return false;
-      }
+      },
     });
 });
 
@@ -126,14 +138,18 @@ function renderGuestSection(event) {
 
   const guests = Array.isArray(event.guests)
     ? event.guests
-    : event.guests.split(",").map(email => email.trim());
+    : event.guests.split(",").map((email) => email.trim());
 
-  const guestList = guests.map(email => `
+  const guestList = guests
+    .map(
+      (email) => `
     <li class="guest-item d-flex justify-content-between align-items-center">
       ${email}
       <button class="btn btn-sm btn-danger ml-2 remove-guest-btn" data-email="${email}" data-event-id="${event.id}">&times;</button>
     </li>
-  `).join("");
+  `,
+    )
+    .join("");
 
   return `
     <div class="guest-section mt-2">

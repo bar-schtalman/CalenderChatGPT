@@ -1,11 +1,13 @@
 // 🔐 Include Authorization header
 function authHeader() {
   const token = localStorage.getItem("AUTH_TOKEN");
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function appendMessage(sender, text) {
-  const msgDiv = $("<div></div>").addClass("message " + sender).html(text);
+  const msgDiv = $("<div></div>")
+    .addClass("message " + sender)
+    .html(text);
   $("#chatWindow").append(msgDiv).append("<div class='clear'></div>");
   scrollToBottom();
 }
@@ -17,9 +19,17 @@ function appendEvent(event) {
   const date = event.date || "?";
   const time = event.time || "N/A - ?";
 
-  const dateText = $("<span class='event-date-text'></span>").text(`📅 ${date}`);
-  const timeText = $("<span class='event-time-text'></span>").text(`🕒 ${time}`);
-  const dateRow = $("<div class='event-date'></div>").append(dateText, " ", timeText);
+  const dateText = $("<span class='event-date-text'></span>").text(
+    `📅 ${date}`,
+  );
+  const timeText = $("<span class='event-time-text'></span>").text(
+    `🕒 ${time}`,
+  );
+  const dateRow = $("<div class='event-date'></div>").append(
+    dateText,
+    " ",
+    timeText,
+  );
 
   const deleteBtn = $("<button class='delete-event'></button>")
     .html("❌")
@@ -33,22 +43,30 @@ function appendEvent(event) {
         },
         error: (xhr) => {
           alert("Delete failed: " + xhr.responseText);
-        }
+        },
       });
     });
 
-  const editBtn = $("<button class='edit-event btn btn-primary btn-sm'></button>")
+  const editBtn = $(
+    "<button class='edit-event btn btn-primary btn-sm'></button>",
+  )
     .html("✏️")
     .on("click", () => openEditModal(event));
 
-  const guestBtn = $("<button class='guest-event btn btn-info btn-sm'></button>")
+  const guestBtn = $(
+    "<button class='guest-event btn btn-info btn-sm'></button>",
+  )
     .html("➕")
     .on("click", () => {
       console.log("Opening guest modal for event:", event.id);
       openGuestModal(event);
     });
 
-  const buttons = $("<div class='button-container'></div>").append(editBtn, deleteBtn, guestBtn);
+  const buttons = $("<div class='button-container'></div>").append(
+    editBtn,
+    deleteBtn,
+    guestBtn,
+  );
   const guestSection = renderGuestSection(event);
 
   card.append(summary, dateRow, buttons, guestSection);
@@ -64,9 +82,17 @@ function refreshEventInUI(event) {
   const date = event.date || "?";
   const time = event.time || "N/A - ?";
 
-  const dateText = $("<span class='event-date-text'></span>").text(`📅 ${date}`);
-  const timeText = $("<span class='event-time-text'></span>").text(`🕒 ${time}`);
-  const dateRow = $("<div class='event-date'></div>").append(dateText, " ", timeText);
+  const dateText = $("<span class='event-date-text'></span>").text(
+    `📅 ${date}`,
+  );
+  const timeText = $("<span class='event-time-text'></span>").text(
+    `🕒 ${time}`,
+  );
+  const dateRow = $("<div class='event-date'></div>").append(
+    dateText,
+    " ",
+    timeText,
+  );
 
   const deleteBtn = $("<button class='delete-event'></button>")
     .html("❌")
@@ -80,24 +106,31 @@ function refreshEventInUI(event) {
         },
         error: (xhr) => {
           alert("Delete failed: " + xhr.responseText);
-        }
+        },
       });
     });
 
-  const editBtn = $("<button class='edit-event btn btn-primary btn-sm'></button>")
+  const editBtn = $(
+    "<button class='edit-event btn btn-primary btn-sm'></button>",
+  )
     .html("✏️")
     .on("click", () => openEditModal(event));
 
-  const guestBtn = $("<button class='guest-event btn btn-info btn-sm'></button>")
+  const guestBtn = $(
+    "<button class='guest-event btn btn-info btn-sm'></button>",
+  )
     .html("➕")
     .on("click", () => openGuestModal(event));
 
-  const buttons = $("<div class='button-container'></div>").append(editBtn, deleteBtn, guestBtn);
+  const buttons = $("<div class='button-container'></div>").append(
+    editBtn,
+    deleteBtn,
+    guestBtn,
+  );
   const guestSection = renderGuestSection(event);
 
   $card.empty().append(summary, dateRow, buttons, guestSection);
 }
-
 
 // Make appendEvent globally accessible as renderEventCard
 window.renderEventCard = appendEvent;

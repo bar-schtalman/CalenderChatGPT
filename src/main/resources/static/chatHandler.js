@@ -1,15 +1,15 @@
 // 🔐 Helper to inject Bearer token from localStorage
 function authHeader() {
   const token = localStorage.getItem("AUTH_TOKEN");
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 $(document).ready(() => {
   // ✅ Store JWT from ?token=... into localStorage
   const urlParams = new URLSearchParams(window.location.search);
-  const tokenFromUrl = urlParams.get('token');
+  const tokenFromUrl = urlParams.get("token");
   if (tokenFromUrl) {
-    localStorage.setItem('AUTH_TOKEN', tokenFromUrl);
+    localStorage.setItem("AUTH_TOKEN", tokenFromUrl);
     const newUrl = window.location.origin + window.location.pathname;
     window.history.replaceState({}, document.title, newUrl);
   }
@@ -29,23 +29,23 @@ $(document).ready(() => {
 
   function loadCalendars() {
     $.ajax({
-      url: '/api/google-calendar/calendars',
-      method: 'GET',
+      url: "/api/google-calendar/calendars",
+      method: "GET",
       headers: authHeader(),
       success: function (data) {
-        const calendarSelect = $('#calendarSelect');
+        const calendarSelect = $("#calendarSelect");
         calendarSelect.empty();
 
         let defaultCalendar = null;
 
         if (data.length > 0) {
           data.forEach(function (calendar) {
-            const option = $('<option></option>')
-              .attr('value', calendar.id)
+            const option = $("<option></option>")
+              .attr("value", calendar.id)
               .text(calendar.name);
 
             if (calendar.primary) {
-              option.prop('selected', true);
+              option.prop("selected", true);
               defaultCalendar = calendar.id;
             }
 
@@ -60,20 +60,25 @@ $(document).ready(() => {
           selectedCalendarId = defaultCalendar || data[0].id;
           updateServerCalendar(selectedCalendarId);
         } else {
-          calendarSelect.append('<option>No calendars found</option>');
+          calendarSelect.append("<option>No calendars found</option>");
         }
       },
       error: function (xhr, status, error) {
-        console.error("❌ Error loading calendars:", status, error, xhr.responseText);
+        console.error(
+          "❌ Error loading calendars:",
+          status,
+          error,
+          xhr.responseText,
+        );
         alert("Failed to load calendars. Check console.");
-      }
+      },
     });
   }
 
   function updateServerCalendar(calendarId) {
     $.ajax({
-      url: '/api/google-calendar/calendars/select-calendar',
-      method: 'POST',
+      url: "/api/google-calendar/calendars/select-calendar",
+      method: "POST",
       headers: authHeader(),
       data: { calendarId },
       success: function () {
@@ -81,139 +86,133 @@ $(document).ready(() => {
       },
       error: function () {
         alert("❌ Failed to update selected calendar on server");
-      }
+      },
     });
   }
 
-  $("#calendarSelect").on('change', function () {
+  $("#calendarSelect").on("change", function () {
     selectedCalendarId = $(this).val();
     console.log("📅 Selected Calendar ID: " + selectedCalendarId);
-    sessionStorage.setItem('selectedCalendarId', selectedCalendarId);
+    sessionStorage.setItem("selectedCalendarId", selectedCalendarId);
     updateServerCalendar(selectedCalendarId);
   });
 
-  $("#chatForm").off("submit").on("submit", function (e) {
-    e.preventDefault();
+  $("#chatForm")
+    .off("submit")
+    .on("submit", function (e) {
+      e.preventDefault();
 
-    const message = $("#chatInput").val().trim();
-    if (!message) return;
+      const message = $("#chatInput").val().trim();
+      if (!message) return;
 
-    appendMessage("user", message);
-    $("#chatInput").val("");
-    $("#chatInput").prop("disabled", true);
-    $("#chatForm button[type=submit]").prop("disabled", true);
-    showTypingIndicator();
+      appendMessage("user", message);
+      $("#chatInput").val("");
+      $("#chatInput").prop("disabled", true);
+      $("#chatForm button[type=submit]").prop("disabled", true);
+      showTypingIndicator();
 
+      $.ajax({
+        url: "/chat/message",
+        method: "POST",
+        headers: {
+          ...authHeader(),
+          "Content-Type": "application/json",
+        },
+        data: JSON.stringify(message),
+        success: (response) => {
+          removeTypingIndicator();
+          $("#chatInput").prop("disabled", false).focus();
+          $("#chatForm button[type=submit]").prop("disabled", false);
 
-$.ajax({
-  url: "/chat/message",
-  method: "POST",
-  headers: {
-    ...authHeader(),
-    'Content-Type': 'application/json'
-  },
-  data: JSON.stringify(message),
-  success: (response) => {
-    removeTypingIndicator();
-    $("#chatInput").prop("disabled", false).focus();;
-    $("#chatForm button[type=submit]").prop("disabled", false);
+          const parsed = JSON.parse(response);
 
+          parsed.forEach((msg) => {
+            if (msg.role === "event") {
+              // === CREATE path: msg.content is a stringified array of event objects
+              if (typeof msg.content === "string") {
+                let events;
+                try {
+                  events = JSON.parse(msg.content);
+                } catch (e) {
+                  console.error("Failed to parse event JSON:", msg.content, e);
+                  return;
+                }
+                events.forEach((ev) => appendEvent(ev));
 
-    const parsed = JSON.parse(response);
+                // === VIEW path: msg itself is an event object
+              } else if (msg.id) {
+                appendEvent(msg);
+              } else {
+                console.warn("Unknown event message format:", msg);
+              }
+            } else {
+              // normal user/assistant messages
+              const role = msg.role === "ai" ? "assistant" : msg.role;
+              appendMessage(role, msg.content);
+            }
+          });
+        },
 
-    parsed.forEach((msg) => {
-      if (msg.role === "event") {
-        // === CREATE path: msg.content is a stringified array of event objects
-        if (typeof msg.content === "string") {
-          let events;
-          try {
-            events = JSON.parse(msg.content);
-          } catch (e) {
-            console.error("Failed to parse event JSON:", msg.content, e);
-            return;
-          }
-          events.forEach(ev => appendEvent(ev));
+        error: (xhr) => {
+          $("#chatInput").prop("disabled", false).focus();
+          $("#chatForm button[type=submit]").prop("disabled", false);
 
-        // === VIEW path: msg itself is an event object
-        } else if (msg.id) {
-          appendEvent(msg);
+          removeTypingIndicator();
 
+          console.error("❌ Chat API error:", xhr.responseText);
+          appendMessage("ai", "❌ Error contacting server");
+        },
+      });
+    });
+
+  $("#showActivityBtn").on("click", function () {
+    $.ajax({
+      url: "/api/events/history",
+      method: "GET",
+      headers: authHeader(),
+      success: function (data) {
+        const activityList = $("#activityItems");
+        activityList.empty();
+
+        if (data.length === 0) {
+          activityList.append(
+            "<li class='list-group-item'>No recent activity found.</li>",
+          );
         } else {
-          console.warn("Unknown event message format:", msg);
-        }
+          data.forEach((activity) => {
+            const cleanContext = cleanEventContext(activity.eventContext);
+            const icon = getActivityIcon(activity.actionDescription || "");
 
-      } else {
-        // normal user/assistant messages
-        const role = msg.role === "ai" ? "assistant" : msg.role;
-        appendMessage(role, msg.content);
-      }
-    });
-  },
-
-
-
-      error: (xhr) => {
-      $("#chatInput").prop("disabled", false).focus();;
-      $("#chatForm button[type=submit]").prop("disabled", false);
-
-      removeTypingIndicator();
-
-        console.error("❌ Chat API error:", xhr.responseText);
-        appendMessage("ai", "❌ Error contacting server");
-      }
-    });
-  });
-
-$("#showActivityBtn").on("click", function () {
-  $.ajax({
-    url: "/api/events/history",
-    method: "GET",
-    headers: authHeader(),
-    success: function (data) {
-      const activityList = $("#activityItems");
-      activityList.empty();
-
-      if (data.length === 0) {
-        activityList.append("<li class='list-group-item'>No recent activity found.</li>");
-      } else {
-        data.forEach(activity => {
-const cleanContext = cleanEventContext(activity.eventContext);
-const icon = getActivityIcon(activity.actionDescription || "");
-
-const item = `
+            const item = `
   <li class="list-group-item">
     <strong>${icon} ${cleanContext}</strong>
     <span>${activity.actionDescription}</span>
     <br><small>${new Date(activity.timestamp).toLocaleString()}</small>
   </li>`;
 
+            activityList.append(item);
+          });
+        }
 
-          activityList.append(item);
-        });
-      }
-
-      $("#activityList").toggle(); // Toggle open/close
-    },
-    error: function (xhr) {
-      console.error("❌ Failed to load activity history:", xhr.responseText);
-      alert("❌ Failed to load activity history. Check console.");
-    }
+        $("#activityList").toggle(); // Toggle open/close
+      },
+      error: function (xhr) {
+        console.error("❌ Failed to load activity history:", xhr.responseText);
+        alert("❌ Failed to load activity history. Check console.");
+      },
+    });
   });
-});
-function getActivityIcon(action) {
-  const a = action.toLowerCase();
-  if (a.includes("deleted")) return "🗑️";
-  if (a.includes("changed") || a.includes("guest")) return "✏️";
-  return "📅";
-}
+  function getActivityIcon(action) {
+    const a = action.toLowerCase();
+    if (a.includes("deleted")) return "🗑️";
+    if (a.includes("changed") || a.includes("guest")) return "✏️";
+    return "📅";
+  }
 
-function cleanEventContext(context) {
-  // Remove any leading emoji or symbols (up to 2 chars + space)
-  return context.replace(/^[^\w\d\s]{1,2}\s*/, '');
-}
-
-
-
+  function cleanEventContext(context) {
+    // Remove any leading emoji or symbols (up to 2 chars + space)
+    return context.replace(/^[^\w\d\s]{1,2}\s*/, "");
+  }
 
   // 🛠️ ✅ Important: Only call calendars after JWT confirmed and server is ready
   $.ajax({
@@ -227,9 +226,8 @@ function cleanEventContext(context) {
     error: function (xhr) {
       console.error("❌ Server not ready for calendars:", xhr.responseText);
       alert("❌ Cannot contact server. Please login again.");
-    }
+    },
   });
-
 });
 
 function showTypingIndicator() {
@@ -245,12 +243,11 @@ function showTypingIndicator() {
 }
 
 function removeTypingIndicator() {
-  const indicators = document.querySelectorAll('.typing-indicator');
-  indicators.forEach(el => el.remove());
+  const indicators = document.querySelectorAll(".typing-indicator");
+  indicators.forEach((el) => el.remove());
 }
 
 function scrollChatToBottom() {
   const chatWindow = document.getElementById("chatWindow");
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
-
