@@ -42,6 +42,14 @@ public class ConversationService {
 
         String intentStr = details.path("intent").asText("");
         if (isNoneIntent(intentStr)) {
+            PendingEventState currPending = pendingEvents.get(user.getId());
+            if (currPending != null && !currPending.isComplete()) {
+                // GPT returned an unstructured answer during an event creation – ask again
+                String retryPrompt = "⚠️ I couldn't understand that. "
+                        + clarificationService.buildClarificationMessage(currPending);
+                return wrapAsJson(retryPrompt, "ai");
+            }
+            // No pending event, or nothing to clarify – handle as a normal query
             return handleNoneIntent(prompt);
         }
 
