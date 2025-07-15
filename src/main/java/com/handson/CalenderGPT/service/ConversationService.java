@@ -49,12 +49,21 @@ public class ConversationService {
         String intentStr = details.path("intent").asText("");
         if (isNoneIntent(intentStr)) {
             PendingEventState currPending = pendingEvents.get(user.getId());
+
             if (currPending != null && !currPending.isComplete()) {
-                // GPT returned an unstructured answer during an event creation – ask again
-                String retryPrompt = "⚠️ I couldn't understand that. "
-                        + clarificationService.buildClarificationMessage(currPending);
-                return wrapAsJson(retryPrompt, "ai");
+                // ננסה להעשיר את ה־PendingEventState
+                PendingEventState enriched = enrichPendingState(prompt, currPending, user);
+
+                if (enriched.isComplete()) {
+                    pendingEvents.remove(user.getId());
+                    return handleCreateEvent(eventParser.toJsonNode(enriched), calendarContext.getCalendarId(), user);
+                }
+
+                // עדיין חסרים פרטים – נבקש הבהרה
+                pendingEvents.put(user.getId(), enriched);
+                return wrapAsJson(clarificationService.buildClarificationMessage(enriched), "ai");
             }
+
             // No pending event, or nothing to clarify – handle as a normal query
             return handleNoneIntent(prompt);
         }
@@ -170,4 +179,30 @@ public class ConversationService {
             return "[{\"role\":\"ai\",\"content\":\"Error generating reply\"}]";
         }
     }
+
+    private PendingEventState enrichPendingState(String prompt, PendingEventState prev, User user) {
+        try {
+            String extractedJson = intentService.extractDetailsFromPrompt(prompt);
+            JsonNode extractedDetails = objectMapper.readTree(extractedJson);
+
+            PendingEventState update = new PendingEventState();
+            update.setIntent(extractedDetails.path("intent").asText(""));
+            update.setSummary(extractedDetails.path("summary").asText(""));
+            update.setStart(extractedDetails.path("start").asText(""));
+            update.setEnd(extractedDetails.path("end").asText(""));
+            update.setLocation(extractedDetails.path("location").asText(""));
+            update.setDescription(extractedDetails.path("description").asText(""));
+
+            if (prev != null) {
+                update.mergeFrom(prev);
+            }
+
+            return update;
+
+        } catch (Exception e) {
+            log.warn("⚠️ Failed to enrich pending state: {}", e.getMessage());
+            return prev; // נמשיך עם הקיים
+        }
+    }
+
 }

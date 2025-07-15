@@ -1,6 +1,10 @@
 package com.handson.CalenderGPT.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.handson.CalenderGPT.model.Event;
+import com.handson.CalenderGPT.model.PendingEventState;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -39,4 +43,16 @@ public class EventParser {
             return fallback;
         }
     }
+
+    public JsonNode toJsonNode(PendingEventState state) {
+        ObjectNode node = new ObjectMapper().createObjectNode();
+        node.put("intent", state.getIntent());
+        node.put("summary", state.getSummary());
+        node.put("start", state.getStart());
+        node.put("end", state.getEnd());
+        node.put("location", state.getLocation());
+        node.put("description", state.getDescription());
+        return node;
+    }
+
 }
