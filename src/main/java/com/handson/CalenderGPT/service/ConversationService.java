@@ -4,10 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.handson.CalenderGPT.context.CalendarContext;
 import com.handson.CalenderGPT.controller.ChatController;
-import com.handson.CalenderGPT.model.Event;
-import com.handson.CalenderGPT.model.IntentType;
-import com.handson.CalenderGPT.model.PendingEventState;
-import com.handson.CalenderGPT.model.User;
+import com.handson.CalenderGPT.model.*;
+import com.handson.CalenderGPT.repository.ConversationRepository;
+import com.handson.CalenderGPT.repository.MessageRepository;
 import com.theokanning.openai.completion.chat.ChatCompletionResult;
 import com.theokanning.openai.completion.chat.ChatMessage;
 import org.slf4j.Logger;
@@ -16,10 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 
 @Service
@@ -36,6 +32,11 @@ public class ConversationService {
     private final Map<UUID, PendingEventState> pendingEvents = new HashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
+
+    private final ConversationRepository conversationRepository;
+    private final MessageRepository messageRepository;
+
+    private static final int HISTORY_LIMIT = 50;
 
     @Transactional
     public String handlePrompt(String prompt, User user, CalendarContext calendarContext) {
@@ -54,9 +55,27 @@ public class ConversationService {
                 // ננסה להעשיר את ה־PendingEventState
                 PendingEventState enriched = enrichPendingState(prompt, currPending, user);
 
+                // נשמור את ההודעה המקורית אם זו הפעם הראשונה (initialPrompt ריק)
+                if (currPending.getInitialPrompt() == null || currPending.getInitialPrompt().isEmpty()) {
+                    enriched.setInitialPrompt(prompt);
+                }
+
                 if (enriched.isComplete()) {
                     pendingEvents.remove(user.getId());
-                    return handleCreateEvent(eventParser.toJsonNode(enriched), calendarContext.getCalendarId(), user);
+
+                    String resultJson = handleCreateEvent(
+                            eventParser.toJsonNode(enriched),
+                            calendarContext.getCalendarId(),
+                            user
+                    );
+
+                    // שמירת הודעת המשתמש המקורית
+                    saveMessageToHistory(user, currPending.getInitialPrompt(), "user");
+
+                    // שמירת תגובת הצ'אט (האירוע שנוצר)
+                    saveMessageToHistory(user, resultJson, "assistant");
+
+                    return resultJson;
                 }
 
                 // עדיין חסרים פרטים – נבקש הבהרה
@@ -65,9 +84,10 @@ public class ConversationService {
             }
 
             // No pending event, or nothing to clarify – handle as a normal query
-            return handleNoneIntent(prompt);
+            return handleNoneIntent(prompt, user);
         }
 
+        // intent is not NONE — מתחילים פעולה מסוג CREATE/EDIT/VIEW/DELETE
         PendingEventState prev = resetStateIfIntentChanged(intentStr, user);
         IntentType intent = mapIntentType(intentStr);
 
@@ -75,14 +95,30 @@ public class ConversationService {
             return handleViewEvents(details, calendarContext.getCalendarId(), user);
         }
 
+        // intent מסוג CREATE/EDIT/DELETE — נבדוק אם יש מספיק פרטים
         PendingEventState state = buildOrUpdateState(details, prev);
         if (!state.isComplete()) {
+            // התחלה של Pending חדש — נגדיר את initialPrompt
+            if (prev == null) {
+                state.setInitialPrompt(prompt);
+            }
+
             pendingEvents.put(user.getId(), state);
             return wrapAsJson(clarificationService.buildClarificationMessage(state), "ai");
         }
 
+        // כל הפרטים קיימים — ניצור את האירוע ונשמור היסטוריה
+
         pendingEvents.remove(user.getId());
-        return handleCreateEvent(details, calendarContext.getCalendarId(), user);
+
+        String resultJson = handleCreateEvent(details, calendarContext.getCalendarId(), user);
+
+// ✅ שמירת הודעת המשתמש והתגובה כי האירוע נוצר מיידית (ללא פנדינג)
+        saveMessageToHistory(user, prompt, "user");
+        saveMessageToHistory(user, resultJson, "assistant");
+
+        return resultJson;
+
     }
 
     private String mergeWithPreviousSummary(String prompt, User user) {
@@ -105,20 +141,57 @@ public class ConversationService {
         return intent.equalsIgnoreCase("NONE");
     }
 
-    private String handleNoneIntent(String prompt) {
-        List<ChatMessage> conv = List.of(
-                new ChatMessage("system", "You are a helpful assistant."),
-                new ChatMessage("user", prompt)
-        );
-        ChatCompletionResult res = chatGPTService.callChatGPT(conv);
-        String reply = res.getChoices().get(0).getMessage().getContent().trim();
+    private String handleNoneIntent(String prompt, User user) {
+        Conversation conversation = conversationRepository.findByUser(user)
+                .orElseGet(() -> conversationRepository.save(Conversation.builder().user(user).build()));
+
+        List<Message> history = messageRepository.findByConversationOrderByTimestampAsc(conversation);
+
+        List<ChatMessage> chatMessages = new ArrayList<>();
+        chatMessages.add(new ChatMessage("system", "You are a helpful assistant."));
+        for (Message msg : history) {
+            chatMessages.add(new ChatMessage(msg.getRole(), msg.getContent()));
+        }
+        chatMessages.add(new ChatMessage("user", prompt));
+
+        String reply;
+        try {
+            ChatCompletionResult result = chatGPTService.callChatGPT(chatMessages);
+            reply = result.getChoices().get(0).getMessage().getContent().trim();
+        } catch (Exception e) {
+            reply = "❌ Sorry, I couldn't generate a response.";
+        }
+
+        messageRepository.save(Message.builder()
+                .conversation(conversation)
+                .role("user")
+                .content(prompt)
+                .build());
+
+        messageRepository.save(Message.builder()
+                .conversation(conversation)
+                .role("assistant")
+                .content(reply)
+                .build());
+
+        long count = messageRepository.countByConversation(conversation);
+        if (count > HISTORY_LIMIT) {
+            long toDelete = count - HISTORY_LIMIT;
+            for (int i = 0; i < toDelete; i++) {
+                messageRepository.findFirstByConversationOrderByTimestampAsc(conversation)
+                        .ifPresent(messageRepository::delete);
+            }
+        }
+
         return wrapAsJson(reply, "ai");
     }
+
 
     private PendingEventState resetStateIfIntentChanged(String intentStr, User user) {
         PendingEventState prev = pendingEvents.get(user.getId());
         if (prev != null && !prev.getIntent().equalsIgnoreCase(intentStr)) {
             pendingEvents.remove(user.getId());
+
             return null;
         }
         return prev;
@@ -204,5 +277,41 @@ public class ConversationService {
             return prev; // נמשיך עם הקיים
         }
     }
+
+    private void saveMessageToHistory(User user, String content, String role) {
+        Conversation conversation = conversationRepository.findByUser(user)
+                .orElseGet(() -> conversationRepository.save(Conversation.builder().user(user).build()));
+
+        messageRepository.save(Message.builder()
+                .conversation(conversation)
+                .role(role)
+                .content(content)
+                .build());
+
+        long count = messageRepository.countByConversation(conversation);
+        if (count > HISTORY_LIMIT) {
+            long toDelete = count - HISTORY_LIMIT;
+            for (int i = 0; i < toDelete; i++) {
+                messageRepository.findFirstByConversationOrderByTimestampAsc(conversation)
+                        .ifPresent(messageRepository::delete);
+            }
+        }
+    }
+    private List<ChatMessage> loadHistory(User user, String newUserPrompt) {
+        Conversation conversation = conversationRepository.findByUser(user)
+                .orElseGet(() -> conversationRepository.save(Conversation.builder().user(user).build()));
+
+        List<Message> history = messageRepository.findByConversationOrderByTimestampAsc(conversation);
+
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(new ChatMessage("system", "You are a helpful assistant."));
+        for (Message msg : history) {
+            messages.add(new ChatMessage(msg.getRole(), msg.getContent()));
+        }
+        messages.add(new ChatMessage("user", newUserPrompt));
+        return messages;
+    }
+
+
 
 }

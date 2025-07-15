@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class PendingEventState {
 
+    private String initialPrompt;
+
     private String intent;
     private String summary = "";
     private String start = "";
