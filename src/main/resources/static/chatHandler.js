@@ -1,26 +1,6 @@
-// 🔐 Helper to inject Bearer token from localStorage
-function authHeader() {
-  const token = localStorage.getItem("AUTH_TOKEN");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 $(document).ready(() => {
-  // ✅ Store JWT from ?token=... into localStorage
-  const urlParams = new URLSearchParams(window.location.search);
-  const tokenFromUrl = urlParams.get("token");
-  if (tokenFromUrl) {
-    localStorage.setItem("AUTH_TOKEN", tokenFromUrl);
-    const newUrl = window.location.origin + window.location.pathname;
-    window.history.replaceState({}, document.title, newUrl);
-  }
 
-  const jwtToken = localStorage.getItem("AUTH_TOKEN");
-  if (!jwtToken) {
-    console.error("❌ No JWT token found. Cannot proceed.");
-    alert("Authentication failed. Please login again.");
-    return;
-  }
-  console.log("🛡️ JWT Token loaded:", jwtToken);
 
   const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   console.log("🕒 Detected browser time zone:", browserTimeZone);
@@ -31,7 +11,7 @@ $(document).ready(() => {
     $.ajax({
       url: "/api/google-calendar/calendars",
       method: "GET",
-      headers: authHeader(),
+      xhrFields: { withCredentials: true },
       success: function (data) {
         const calendarSelect = $("#calendarSelect");
         calendarSelect.empty();
@@ -79,7 +59,7 @@ $(document).ready(() => {
     $.ajax({
       url: "/api/google-calendar/calendars/select-calendar",
       method: "POST",
-      headers: authHeader(),
+      xhrFields: { withCredentials: true },
       data: { calendarId },
       success: function () {
         console.log("✅ Calendar ID updated on server: " + calendarId);
@@ -114,10 +94,9 @@ $(document).ready(() => {
       $.ajax({
         url: "/chat/message",
         method: "POST",
-        headers: {
-          ...authHeader(),
-          "Content-Type": "application/json",
-        },
+      xhrFields: { withCredentials: true },
+      contentType: "application/json",
+
         data: JSON.stringify(message),
         success: (response) => {
           removeTypingIndicator();
@@ -169,7 +148,7 @@ $(document).ready(() => {
     $.ajax({
       url: "/api/events/history",
       method: "GET",
-      headers: authHeader(),
+      xhrFields: { withCredentials: true },
       success: function (data) {
         const activityList = $("#activityItems");
         activityList.empty();
@@ -218,7 +197,7 @@ $(document).ready(() => {
   $.ajax({
     url: "/api/events/history",
     method: "GET",
-    headers: authHeader(),
+    xhrFields: { withCredentials: true },
     success: function () {
       console.log("✅ Server ready. Loading calendars now...");
       loadCalendars();

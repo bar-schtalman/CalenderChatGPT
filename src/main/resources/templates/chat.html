@@ -17,15 +17,8 @@
     <link rel="stylesheet" th:href="@{/styles.css}" href="/styles.css" />
   </head>
   <body>
-    <!-- ✅ Store JWT from URL (if present) -->
-    <script>
-      const urlParams = new URLSearchParams(window.location.search);
-      const tokenFromUrl = urlParams.get("token");
-      if (tokenFromUrl) {
-        localStorage.setItem("AUTH_TOKEN", tokenFromUrl);
-        window.history.replaceState({}, document.title, "/chat-ui");
-      }
-    </script>
+
+
 
     <div id="chatPage" class="chat-container">
       <div class="d-flex justify-content-between align-items-center">
@@ -200,44 +193,13 @@
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
 
     <!-- ✅ Dynamically load protected JS files with JWT -->
-    <script>
-      const token = localStorage.getItem("AUTH_TOKEN");
-      if (!token) {
-        alert("Missing JWT. Please log in again.");
-        window.location.href = "/logout";
-      }
+    <script src="/utils.js"></script>
+    <script src="/apiClient.js"></script>
+    <script src="/eventRenderer.js"></script>
+    <script src="/eventEditor.js"></script>
+    <script src="/guestRenderer.js"></script>
+    <script src="/chatHandler.js"></script>
 
-      const protectedScripts = [
-        "/utils.js",
-        "/apiClient.js",
-        "/eventRenderer.js",
-        "/eventEditor.js",
-        "/guestRenderer.js",
-        "/chatHandler.js",
-      ];
-
-      function loadScriptWithAuth(url) {
-        fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-          .then((res) => {
-            if (!res.ok)
-              throw new Error(`Failed to load ${url}: ${res.status}`);
-            return res.text();
-          })
-          .then((code) => {
-            const script = document.createElement("script");
-            script.textContent = code;
-            document.body.appendChild(script);
-          })
-          .catch((err) => {
-            console.error(err);
-            alert("🔐 Failed to load scripts. Check console.");
-          });
-      }
-
-      protectedScripts.forEach(loadScriptWithAuth);
-    </script>
 
     <!-- Logout Handler -->
     <script>

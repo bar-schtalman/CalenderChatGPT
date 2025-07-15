@@ -1,8 +1,4 @@
-// 🔐 Include Authorization header
-function authHeader() {
-  const token = localStorage.getItem("AUTH_TOKEN");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+
 
 function appendMessage(sender, text) {
   const msgDiv = $("<div></div>")
@@ -37,7 +33,7 @@ function appendEvent(event) {
       $.ajax({
         url: `/api/events/delete/${event.id}`,
         method: "DELETE",
-        headers: authHeader(),
+xhrFields: { withCredentials: true }, // ✅ שולח את ה־cookie
         success: () => {
           card.html("<div class='event-deleted'>DELETED</div>");
         },
@@ -100,7 +96,8 @@ function refreshEventInUI(event) {
       $.ajax({
         url: `/api/events/delete/${event.id}`,
         method: "DELETE",
-        headers: authHeader(), // 👈 added this for JWT
+            xhrFields: { withCredentials: true }, // ✅ שולח את ה־cookie
+
         success: () => {
           $card.html("<div class='event-deleted'>DELETED</div>");
         },

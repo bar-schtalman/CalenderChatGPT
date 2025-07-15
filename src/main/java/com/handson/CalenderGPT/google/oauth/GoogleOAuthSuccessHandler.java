@@ -3,6 +3,7 @@ package com.handson.CalenderGPT.google.oauth;
 import com.handson.CalenderGPT.context.CalendarContext;
 import com.handson.CalenderGPT.model.User;
 import com.handson.CalenderGPT.service.UserService;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -35,8 +36,11 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
             return;
         }
 
+        OAuth2AuthorizedClient client = clientService.loadAuthorizedClient(
+                oauthToken.getAuthorizedClientRegistrationId(),
+                oauthToken.getName()
+        );
 
-        OAuth2AuthorizedClient client = clientService.loadAuthorizedClient(oauthToken.getAuthorizedClientRegistrationId(), oauthToken.getName());
         if (client == null || client.getAccessToken() == null) {
             response.sendError(SC_UNAUTHORIZED, "Missing authorized client");
             return;
@@ -44,14 +48,25 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
 
         log.info("✅ Google OAuth2 login successful for {}", oauthToken.getName());
 
-        // Delegate all user upsert, refresh-token storage, calendar lookup, and JWT creation
+        // Handle user login/upsert logic
         User user = userService.handleOAuthLogin(oauthToken, client);
-
-        // Preserve the OAuth2AuthorizedClient in session context if needed downstream
         calendarContext.setAuthorizedClient(client);
 
-        // Generate the JWT and redirect
-        String jwt = userService.createJwtFor(user);
-        response.sendRedirect("/chat-ui?token=" + jwt);
+        // Generate new JWT for this user
+        String jwtToken = userService.createJwtFor(user);
+
+        // Set secure HttpOnly cookie with JWT
+        Cookie cookie = new Cookie("AUTH_TOKEN", jwtToken);
+        cookie.setHttpOnly(true);
+        cookie.setSecure(true);
+        cookie.setPath("/");
+        cookie.setMaxAge(3600); // 1 hour (adjust as needed)
+
+        // SameSite=None is not officially supported in Cookie API pre-Servlet 6.0, so set it manually
+        response.addHeader("Set-Cookie",
+                String.format("%s; Path=/; Max-Age=3600; Secure; HttpOnly; SameSite=None", cookie.getName() + "=" + cookie.getValue()));
+
+        // Redirect to frontend
+        response.sendRedirect("/chat-ui");
     }
 }

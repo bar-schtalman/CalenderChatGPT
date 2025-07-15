@@ -3,12 +3,15 @@ package com.handson.CalenderGPT.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.handson.CalenderGPT.context.CalendarContext;
+import com.handson.CalenderGPT.controller.ChatController;
 import com.handson.CalenderGPT.model.Event;
 import com.handson.CalenderGPT.model.IntentType;
 import com.handson.CalenderGPT.model.PendingEventState;
 import com.handson.CalenderGPT.model.User;
 import com.theokanning.openai.completion.chat.ChatCompletionResult;
 import com.theokanning.openai.completion.chat.ChatMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
 
 @Service
 @RequiredArgsConstructor
@@ -31,10 +35,12 @@ public class ConversationService {
 
     private final Map<UUID, PendingEventState> pendingEvents = new HashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final Logger log = LoggerFactory.getLogger(ChatController.class);
 
     @Transactional
     public String handlePrompt(String prompt, User user, CalendarContext calendarContext) {
         String merged = mergeWithPreviousSummary(prompt, user);
+        log.info("string merge: {}", merged);
         JsonNode details = parseDetailsJson(merged);
         if (details == null) {
             return wrapAsJson("⚠️ I couldn't understand that. Can you rephrase?", "ai");
@@ -77,7 +83,9 @@ public class ConversationService {
 
     private JsonNode parseDetailsJson(String text) {
         try {
+            log.info("string text: {}", text);
             String extracted = intentService.extractDetailsFromPrompt(text);
+            log.info("string extracted: {}", extracted);
             return objectMapper.readTree(extracted);
         } catch (Exception e) {
             return null;

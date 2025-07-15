@@ -1,9 +1,3 @@
-// 🔐 Include Authorization header
-function authHeader() {
-  const token = localStorage.getItem("AUTH_TOKEN");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 let currentEditingEvent = null;
 
 function openEditModal(event) {
@@ -12,7 +6,7 @@ function openEditModal(event) {
   $.ajax({
     url: `/api/events/${event.id}`,
     method: "GET",
-    headers: authHeader(),
+    xhrFields: { withCredentials: true }, // ✅ שולח את ה־cookie עם הבקשה
     success: function (data) {
       const [startDate, startTime] = data.start.split(" ");
       const [endDate, endTime] = data.end.split(" ");
@@ -53,7 +47,7 @@ $("#saveEdit").click(() => {
   $.ajax({
     url: `/api/events/update/${currentEditingEvent.id}`,
     method: "PUT",
-    headers: authHeader(),
+    xhrFields: { withCredentials: true }, // ✅ שולח את ה־cookie
     contentType: "application/json",
     data: JSON.stringify(updatedEvent),
     success: () => {
@@ -63,9 +57,8 @@ $("#saveEdit").click(() => {
       $.ajax({
         url: `/api/events/${currentEditingEvent.id}`,
         method: "GET",
-        headers: authHeader(),
+        xhrFields: { withCredentials: true }, // ✅ שולח את ה־cookie
         success: (updatedData) => {
-          // ⚡ Fix: parse string like "14-05-2025 16:00" manually
           const [startDateStr, startTimeStr] = updatedData.start.split(" ");
           const [endDateStr, endTimeStr] = updatedData.end.split(" ");
 
