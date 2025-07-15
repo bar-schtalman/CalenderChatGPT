@@ -203,11 +203,26 @@
 
     <!-- Logout Handler -->
     <script>
-      $("#logoutButton").on("click", () => {
-        localStorage.removeItem("AUTH_TOKEN");
-        sessionStorage.clear();
-        window.location.href = "/logout";
+  document.addEventListener("DOMContentLoaded", function () {
+    const logoutBtn = document.getElementById("logoutButton");
+
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", () => {
+        fetch("/logout", {
+          method: "GET",
+          credentials: "include"
+        })
+        .then(() => {
+          window.location.href = "/"; // הפנייה לדף הבית
+        })
+        .catch(() => {
+          alert("אירעה שגיאה ביציאה מהמערכת");
+        });
       });
-    </script>
+    }
+  });
+</script>
+
+
   </body>
 </html>
