@@ -54,19 +54,6 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
 
         // Generate new JWT for this user
         String jwtToken = userService.createJwtFor(user);
-
-        // Set secure HttpOnly cookie with JWT
-        Cookie cookie = new Cookie("AUTH_TOKEN", jwtToken);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(true);
-        cookie.setPath("/");
-        cookie.setMaxAge(3600); // 1 hour (adjust as needed)
-
-        // SameSite=None is not officially supported in Cookie API pre-Servlet 6.0, so set it manually
-        response.addHeader("Set-Cookie",
-                String.format("%s; Path=/; Max-Age=3600; Secure; HttpOnly; SameSite=None", cookie.getName() + "=" + cookie.getValue()));
-
-        // Redirect to frontend
-        response.sendRedirect("/chat-ui");
+        response.sendRedirect("/chat-ui?token=" + jwtToken);
     }
 }

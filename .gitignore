@@ -46,3 +46,10 @@ application-secret.properties
 *.env
 
 *.json
+
+# קבצי מפתחות SSH
+.ssh/
+# קבצים עם סיומות רגישות
+*.pem
+*.key
+
