@@ -34,47 +34,38 @@ public class SecurityConfig {
      * Tell Spring Security to completely ignore all /actuator/** requests,
      * so they never hit the filter chain.
      */
-    @Bean
-    public WebSecurityCustomizer webSecurityCustomizer() {
-        return web -> web.ignoring().requestMatchers("/actuator/**");
-    }
-
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-          .csrf(csrf -> csrf.disable())
-          .cors(cors -> cors.disable())
-          .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
-          .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-          .authorizeHttpRequests(auth -> auth
-              // still explicitly permit actuator just in case
-              .requestMatchers("/actuator/**").permitAll()
-              // public endpoints
-              .requestMatchers(
-                  "/", "/chat-ui", "/login/**", "/logout", "/oauth2/**",
-                  "/swagger-ui/**", "/v3/api-docs/**",
-                  "/favicon.ico", "/static/**",
-                  "/utils.js", "/apiClient.js", "/eventRenderer.js",
-                  "/eventEditor.js", "/guestRenderer.js", "/chatHandler.js",
-                  "/styles.css"
-              ).permitAll()
-              // everything else needs authentication
-              .anyRequest().authenticated()
+   @Bean
+public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    http
+      .csrf(csrf -> csrf.disable())
+      .cors(cors -> cors.disable())
+      .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+      .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+      .authorizeHttpRequests(auth -> auth
+          // Ensure actuator is fully open:
+          .requestMatchers("/actuator/**").permitAll()
+          // שאר ה־endpoints:
+          .requestMatchers(
+              "/", "/chat-ui", "/login/**", "/logout", "/oauth2/**",
+              "/swagger-ui/**", "/v3/api-docs/**",
+              "/favicon.ico", "/static/**",
+              "/utils.js","/apiClient.js","/chatHandler.js","/styles.css"
+          ).permitAll()
+          .anyRequest().authenticated()
+      )
+      .oauth2Login(oauth2 -> oauth2
+          .authorizationEndpoint(authz ->
+            authz.authorizationRequestResolver(
+              new CustomAuthorizationRequestResolver(clientRegistrationRepository)
+            )
           )
-          .oauth2Login(oauth2 -> oauth2
-              .authorizationEndpoint(authz ->
-                  authz.authorizationRequestResolver(
-                      new CustomAuthorizationRequestResolver(clientRegistrationRepository)
-                  )
-              )
-              .successHandler(googleOAuthSuccessHandler)
-          );
+          .successHandler(googleOAuthSuccessHandler)
+      );
 
-        // JWT filter applies after static/actuator are ignored
-        http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+    http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+    return http.build();
+}
 
-        return http.build();
-    }
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
