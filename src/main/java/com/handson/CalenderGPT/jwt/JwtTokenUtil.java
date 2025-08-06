@@ -1,9 +1,7 @@
 package com.handson.CalenderGPT.jwt;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Base64;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
+
 
 import io.jsonwebtoken.*;
 import jakarta.annotation.PostConstruct;
