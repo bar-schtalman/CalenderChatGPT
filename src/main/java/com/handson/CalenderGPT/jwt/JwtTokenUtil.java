@@ -1,4 +1,9 @@
 package com.handson.CalenderGPT.jwt;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Base64;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 
 import io.jsonwebtoken.*;
 import jakarta.annotation.PostConstruct;
@@ -32,27 +37,29 @@ public class JwtTokenUtil {
     private PublicKey publicKey;
 
     @PostConstruct
-    public void loadKeys() throws Exception {
-        // Load private key (PKCS#8 PEM format)
-        try (InputStream in = getClass().getResourceAsStream(privateKeyPath)) {
-            byte[] keyBytes = in.readAllBytes();
-            String keyPEM = new String(keyBytes).replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "").replaceAll("\n", "");
-            byte[] decoded = Base64.getDecoder().decode(keyPEM);
-            PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);
-            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-            privateKey = keyFactory.generatePrivate(keySpec);
-        }
+public void loadKeys() throws Exception {
+    // 1. טען את המפתח הפרטי
+    byte[] privateBytes = Files.readAllBytes(Paths.get(privateKeyPath));
+    String privatePem = new String(privateBytes)
+        .replace("-----BEGIN PRIVATE KEY-----", "")
+        .replace("-----END PRIVATE KEY-----", "")
+        .replaceAll("\\s+", "");
+    byte[] decodedPriv = Base64.getDecoder().decode(privatePem);
+    PKCS8EncodedKeySpec privKeySpec = new PKCS8EncodedKeySpec(decodedPriv);
+    KeyFactory kf = KeyFactory.getInstance("RSA");
+    this.privateKey = kf.generatePrivate(privKeySpec);
 
-        // Load public key (X.509 PEM format)
-        try (InputStream in = getClass().getResourceAsStream(publicKeyPath)) {
-            byte[] keyBytes = in.readAllBytes();
-            String keyPEM = new String(keyBytes).replace("-----BEGIN PUBLIC KEY-----", "").replace("-----END PUBLIC KEY-----", "").replaceAll("\n", "");
-            byte[] decoded = Base64.getDecoder().decode(keyPEM);
-            X509EncodedKeySpec keySpec = new X509EncodedKeySpec(decoded);
-            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-            publicKey = keyFactory.generatePublic(keySpec);
-        }
-    }
+    // 2. טען את המפתח הציבורי
+    byte[] publicBytes = Files.readAllBytes(Paths.get(publicKeyPath));
+    String publicPem = new String(publicBytes)
+        .replace("-----BEGIN PUBLIC KEY-----", "")
+        .replace("-----END PUBLIC KEY-----", "")
+        .replaceAll("\\s+", "");
+    byte[] decodedPub = Base64.getDecoder().decode(publicPem);
+    X509EncodedKeySpec pubKeySpec = new X509EncodedKeySpec(decodedPub);
+    this.publicKey = kf.generatePublic(pubKeySpec);
+}
+
 
     public String generateToken(UUID userId, String email, String fullName) {
         Instant now = Instant.now();
