@@ -1,23 +1,20 @@
 package com.handson.CalenderGPT.jwt;
 
-import com.handson.CalenderGPT.model.User;
-import com.handson.CalenderGPT.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.UUID;
 
+/**
+ * סינון שמטפל בבדיקת JWT בכל request.
+ * מדלג לגמרי על requests ל-/actuator/** כדי שלא יחסום את health check.
+ */
 @Component
 public class JwtRequestFilter extends OncePerRequestFilter {
 
@@ -25,55 +22,43 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     private JwtTokenUtil jwtTokenUtil;
 
     @Autowired
-    private UserRepository userRepository;
+    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        String token = null;
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
+            throws ServletException, IOException {
 
-        //  FIRST: Look for Bearer token in Authorization header
-        String authHeader = request.getHeader("Authorization");
+        // 1. דילוג על actuator endpoints
+        String path = request.getServletPath();
+        if (path.startsWith("/actuator/")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // 2. המשך לוגיקת ה-JWT הרגילה
+        final String authHeader = request.getHeader("Authorization");
+        String jwt = null;
+
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            token = authHeader.substring(7);
-
-        }
-
-
-        if (token == null && request.getCookies() != null) {
-            for (Cookie cookie : request.getCookies()) {
-                if ("AUTH_TOKEN".equals(cookie.getName())) {
-                    token = cookie.getValue();
-                    break;
-                }
+            jwt = authHeader.substring(7);
+            try {
+                // כאן תוכל להוסיף בדיקה של התוקף, רענון וכו'
+                jwtTokenUtil.validateToken(jwt);
+            } catch (Exception ex) {
+                // אם ה-JWT לא תקין => 401
+                jwtAuthenticationEntryPoint.commence(request, response,
+                        new JwtException("Invalid or expired JWT: " + ex.getMessage()));
+                return;
             }
+        } else {
+            // אם אין Authorization header בכלל, תמשיך כדי שאם זה request מאובטח הוא יחזור 401 בהמשך
         }
 
-        // If token found, try to validate and authenticate
-        try {
-            if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                UUID userId = jwtTokenUtil.getUserIdFromToken(token);
-                User user = userRepository.findById(userId).orElse(null);
+        // ניתן להוסיף כאן הצבה של Authentication ב-SecurityContext אם צריך
 
-                if (user != null) {
-                    // Set the user authentication token for JWT
-                    UsernamePasswordAuthenticationToken jwtAuthToken = new UsernamePasswordAuthenticationToken(user, null, null);
-
-                    // Get existing OAuth2 token from the SecurityContext (if available)
-                    Authentication existingOAuth2Auth = SecurityContextHolder.getContext().getAuthentication();
-                    if (existingOAuth2Auth instanceof OAuth2AuthenticationToken) {
-                        // If OAuth2 authentication token exists, set both JWT and OAuth2 in the context
-                        SecurityContextHolder.getContext().setAuthentication(existingOAuth2Auth); // Keep OAuth2 token
-                    }
-
-
-                    SecurityContextHolder.getContext().setAuthentication(jwtAuthToken);
-                }
-            }
-        } catch (Exception ex) {
-            logger.warn("JWT auth failed: " + ex.getMessage());
-        }
-
+        // 3. העברת השליטה הלאה
         filterChain.doFilter(request, response);
     }
-
 }
