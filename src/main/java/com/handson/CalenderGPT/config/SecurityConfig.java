@@ -32,40 +32,48 @@ public class SecurityConfig {
 
     /**
      * Tell Spring Security to completely ignore all /actuator/** requests,
-     * so they never hit the filter chain.
+     * so they never hit the filter chain at all.
      */
-   @Bean
-public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-    http
-      .csrf(csrf -> csrf.disable())
-      .cors(cors -> cors.disable())
-      .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
-      .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-      .authorizeHttpRequests(auth -> auth
-          // Ensure actuator is fully open:
-          .requestMatchers("/actuator/**").permitAll()
-          // שאר ה־endpoints:
-          .requestMatchers(
-              "/", "/chat-ui", "/login/**", "/logout", "/oauth2/**",
-              "/swagger-ui/**", "/v3/api-docs/**",
-              "/favicon.ico", "/static/**",
-              "/utils.js","/apiClient.js","/chatHandler.js","/styles.css"
-          ).permitAll()
-          .anyRequest().authenticated()
-      )
-      .oauth2Login(oauth2 -> oauth2
-          .authorizationEndpoint(authz ->
-            authz.authorizationRequestResolver(
-              new CustomAuthorizationRequestResolver(clientRegistrationRepository)
-            )
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return web -> web.ignoring().requestMatchers("/actuator/**");
+    }
+
+    /**
+     * The main security filter chain for all other requests.
+     */
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+          .csrf(csrf -> csrf.disable())
+          .cors(cors -> cors.disable())
+          .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+          .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+          .authorizeHttpRequests(auth -> auth
+              // public endpoints
+              .requestMatchers(
+                  "/", "/chat-ui", "/login/**", "/logout", "/oauth2/**",
+                  "/swagger-ui/**", "/v3/api-docs/**",
+                  "/favicon.ico", "/static/**",
+                  "/utils.js", "/apiClient.js", "/chatHandler.js", "/styles.css"
+              ).permitAll()
+              // everything else requires auth
+              .anyRequest().authenticated()
           )
-          .successHandler(googleOAuthSuccessHandler)
-      );
+          .oauth2Login(oauth2 -> oauth2
+              .authorizationEndpoint(authz ->
+                  authz.authorizationRequestResolver(
+                      new CustomAuthorizationRequestResolver(clientRegistrationRepository)
+                  )
+              )
+              .successHandler(googleOAuthSuccessHandler)
+          );
 
-    http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
-    return http.build();
-}
+        // JwtRequestFilter must come after the request is known not to be actuator
+        http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
 
+        return http.build();
+    }
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
