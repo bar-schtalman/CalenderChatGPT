@@ -6,6 +6,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -39,19 +41,18 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
         // 2. המשך לוגיקת ה-JWT הרגילה
         final String authHeader = request.getHeader("Authorization");
-        String jwt = null;
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            jwt = authHeader.substring(7);
+            String jwt = authHeader.substring(7);
             try {
                 jwtTokenUtil.validateToken(jwt);
             } catch (JwtException ex) {
-                // אם ה-JWT לא תקין או פג תוקפו → החזרת 401
-                jwtAuthenticationEntryPoint.commence(request, response, ex);
+                // אורזים את ה-JwtException לתוך BadCredentialsException
+                AuthenticationException authEx = new BadCredentialsException("Invalid or expired JWT", ex);
+                jwtAuthenticationEntryPoint.commence(request, response, authEx);
                 return;
             }
         }
-        // אם אין Header, נעבור הלאה – הביטחון יטפל בהמשך בבקשות מאובטחות
 
         // 3. העברת השליטה הלאה
         filterChain.doFilter(request, response);
