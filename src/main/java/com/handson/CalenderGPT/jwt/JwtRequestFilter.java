@@ -1,10 +1,10 @@
 package com.handson.CalenderGPT.jwt;
 
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -13,7 +13,7 @@ import java.io.IOException;
 
 /**
  * סינון שמטפל בבדיקת JWT בכל request.
- * מדלג לגמרי על requests ל-/actuator/** כדי שלא יחסום את health check.
+ * מדלג על כל קריאה ל-/actuator/** כדי שלא יחסום את health check.
  */
 @Component
 public class JwtRequestFilter extends OncePerRequestFilter {
@@ -44,19 +44,14 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             jwt = authHeader.substring(7);
             try {
-                // כאן תוכל להוסיף בדיקה של התוקף, רענון וכו'
                 jwtTokenUtil.validateToken(jwt);
-            } catch (Exception ex) {
-                // אם ה-JWT לא תקין => 401
-                jwtAuthenticationEntryPoint.commence(request, response,
-                        new JwtException("Invalid or expired JWT: " + ex.getMessage()));
+            } catch (JwtException ex) {
+                // אם ה-JWT לא תקין או פג תוקפו → החזרת 401
+                jwtAuthenticationEntryPoint.commence(request, response, ex);
                 return;
             }
-        } else {
-            // אם אין Authorization header בכלל, תמשיך כדי שאם זה request מאובטח הוא יחזור 401 בהמשך
         }
-
-        // ניתן להוסיף כאן הצבה של Authentication ב-SecurityContext אם צריך
+        // אם אין Header, נעבור הלאה – הביטחון יטפל בהמשך בבקשות מאובטחות
 
         // 3. העברת השליטה הלאה
         filterChain.doFilter(request, response);
