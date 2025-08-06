@@ -34,6 +34,10 @@ public class JwtTokenUtil {
 
     @PostConstruct
     public void loadKeys() throws Exception {
+        System.out.println(">>> jwt.privateKeyPath = " + privateKeyPath);
+System.out.println(">>> jwt.publicKeyPath  = " + publicKeyPath);
+System.out.println(">>> jwt.expirationMinutes = " + expirationMinutes);
+
         // טען את המפתח הפרטי מתוך /keys/private_key.pem
         byte[] privateBytes = Files.readAllBytes(Paths.get(privateKeyPath));
         String privatePem = new String(privateBytes)
