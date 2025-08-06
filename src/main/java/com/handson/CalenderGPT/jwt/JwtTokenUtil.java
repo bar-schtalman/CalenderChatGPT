@@ -1,14 +1,12 @@
 package com.handson.CalenderGPT.jwt;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-
 
 import io.jsonwebtoken.*;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
 import java.security.PublicKey;
@@ -35,39 +33,49 @@ public class JwtTokenUtil {
     private PublicKey publicKey;
 
     @PostConstruct
-public void loadKeys() throws Exception {
-    // 1. טען את המפתח הפרטי
-    byte[] privateBytes = Files.readAllBytes(Paths.get(privateKeyPath));
-    String privatePem = new String(privateBytes)
-        .replace("-----BEGIN PRIVATE KEY-----", "")
-        .replace("-----END PRIVATE KEY-----", "")
-        .replaceAll("\\s+", "");
-    byte[] decodedPriv = Base64.getDecoder().decode(privatePem);
-    PKCS8EncodedKeySpec privKeySpec = new PKCS8EncodedKeySpec(decodedPriv);
-    KeyFactory kf = KeyFactory.getInstance("RSA");
-    this.privateKey = kf.generatePrivate(privKeySpec);
+    public void loadKeys() throws Exception {
+        // טען את המפתח הפרטי מתוך /keys/private_key.pem
+        byte[] privateBytes = Files.readAllBytes(Paths.get(privateKeyPath));
+        String privatePem = new String(privateBytes)
+            .replace("-----BEGIN PRIVATE KEY-----", "")
+            .replace("-----END PRIVATE KEY-----", "")
+            .replaceAll("\\s+", "");
+        byte[] decodedPriv = Base64.getDecoder().decode(privatePem);
+        PKCS8EncodedKeySpec privSpec = new PKCS8EncodedKeySpec(decodedPriv);
+        KeyFactory kf = KeyFactory.getInstance("RSA");
+        this.privateKey = kf.generatePrivate(privSpec);
 
-    // 2. טען את המפתח הציבורי
-    byte[] publicBytes = Files.readAllBytes(Paths.get(publicKeyPath));
-    String publicPem = new String(publicBytes)
-        .replace("-----BEGIN PUBLIC KEY-----", "")
-        .replace("-----END PUBLIC KEY-----", "")
-        .replaceAll("\\s+", "");
-    byte[] decodedPub = Base64.getDecoder().decode(publicPem);
-    X509EncodedKeySpec pubKeySpec = new X509EncodedKeySpec(decodedPub);
-    this.publicKey = kf.generatePublic(pubKeySpec);
-}
-
+        // טען את המפתח הציבורי מתוך /keys/public_key.pem
+        byte[] publicBytes = Files.readAllBytes(Paths.get(publicKeyPath));
+        String publicPem = new String(publicBytes)
+            .replace("-----BEGIN PUBLIC KEY-----", "")
+            .replace("-----END PUBLIC KEY-----", "")
+            .replaceAll("\\s+", "");
+        byte[] decodedPub = Base64.getDecoder().decode(publicPem);
+        X509EncodedKeySpec pubSpec = new X509EncodedKeySpec(decodedPub);
+        this.publicKey = kf.generatePublic(pubSpec);
+    }
 
     public String generateToken(UUID userId, String email, String fullName) {
         Instant now = Instant.now();
         Instant exp = now.plusSeconds(expirationMinutes * 60);
 
-        return Jwts.builder().setSubject(userId.toString()).claim("email", email).claim("name", fullName).setIssuedAt(Date.from(now)).setExpiration(Date.from(exp)).setId(UUID.randomUUID().toString()).signWith(privateKey, SignatureAlgorithm.RS256).compact();
+        return Jwts.builder()
+            .setSubject(userId.toString())
+            .claim("email", email)
+            .claim("name", fullName)
+            .setIssuedAt(Date.from(now))
+            .setExpiration(Date.from(exp))
+            .setId(UUID.randomUUID().toString())
+            .signWith(privateKey, SignatureAlgorithm.RS256)
+            .compact();
     }
 
     public Jws<Claims> validateToken(String token) throws JwtException {
-        return Jwts.parserBuilder().setSigningKey(publicKey).build().parseClaimsJws(token);
+        return Jwts.parserBuilder()
+            .setSigningKey(publicKey)
+            .build()
+            .parseClaimsJws(token);
     }
 
     public UUID getUserIdFromToken(String token) {
