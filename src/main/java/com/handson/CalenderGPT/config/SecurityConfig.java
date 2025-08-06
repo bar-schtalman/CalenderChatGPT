@@ -29,14 +29,42 @@ public class SecurityConfig {
     @Autowired
     private ClientRegistrationRepository clientRegistrationRepository;
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http.csrf(csrf -> csrf.disable()).cors(cors -> cors.disable()).exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint)).sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)).authorizeHttpRequests(auth -> auth.requestMatchers("/", "/chat-ui", "/login/**", "/logout","/oauth2/**", "/swagger-ui/**", "/v3/api-docs/**", "/favicon.ico", "/static/**", "/utils.js", "/apiClient.js", "/eventRenderer.js", "/eventEditor.js", "/guestRenderer.js", "/chatHandler.js", "/styles.css ","/actuator/health", "/actuator/info").permitAll().anyRequest().authenticated()).oauth2Login(oauth2 -> oauth2.authorizationEndpoint(authz -> authz.authorizationRequestResolver(new CustomAuthorizationRequestResolver(clientRegistrationRepository))).successHandler(googleOAuthSuccessHandler));
+@Bean
+public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    http
+      .csrf(csrf -> csrf.disable())
+      .cors(cors -> cors.disable())
+      .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+      .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+      .authorizeHttpRequests(auth -> auth
+          // 1. קודם כל תן גישה חופשית לכל actuator:
+          .requestMatchers("/actuator/**").permitAll()
+          // 2. ואז כל הנתיבים הציבוריים הרגילים:
+          .requestMatchers(
+              "/", "/chat-ui", "/login/**", "/logout", "/oauth2/**",
+              "/swagger-ui/**", "/v3/api-docs/**",
+              "/favicon.ico", "/static/**",
+              "/utils.js", "/apiClient.js", "/eventRenderer.js",
+              "/eventEditor.js", "/guestRenderer.js", "/chatHandler.js",
+              "/styles.css"
+          ).permitAll()
+          // 3. כל השאר דורש authentication
+          .anyRequest().authenticated()
+      )
+      .oauth2Login(oauth2 -> oauth2
+          .authorizationEndpoint(authz ->
+              authz.authorizationRequestResolver(
+                  new CustomAuthorizationRequestResolver(clientRegistrationRepository)
+              )
+          )
+          .successHandler(googleOAuthSuccessHandler)
+      );
 
-        http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+    // ודא שה־JWT filter יופעל *אחרי* שה־actuator כבר מוצהר כ־permitAll
+    http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
 
-        return http.build();
-    }
+    return http.build();
+}
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
