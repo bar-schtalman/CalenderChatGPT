@@ -1,6 +1,18 @@
-version: '3.3'
+version: "3.3"
 
 services:
+  appserver:
+    container_name: server
+    image: barschtalman/calendergpt:latest
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/calendar_gpt
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+    depends_on:
+      - postgres
+
   postgres:
     image: postgres:15
     container_name: postgres-calendar
