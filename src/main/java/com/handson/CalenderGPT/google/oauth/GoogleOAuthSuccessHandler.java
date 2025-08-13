@@ -28,32 +28,38 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
     private final UserService userService;
     private final CalendarContext calendarContext;
 
-    @Override
-    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException {
+   @Override
+public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException {
 
-        if (!(authentication instanceof OAuth2AuthenticationToken oauthToken)) {
-            response.sendError(SC_UNAUTHORIZED, "Authentication failed");
-            return;
-        }
-
-        OAuth2AuthorizedClient client = clientService.loadAuthorizedClient(
-                oauthToken.getAuthorizedClientRegistrationId(),
-                oauthToken.getName()
-        );
-
-        if (client == null || client.getAccessToken() == null) {
-            response.sendError(SC_UNAUTHORIZED, "Missing authorized client");
-            return;
-        }
-
-        log.info("✅ Google OAuth2 login successful for {}", oauthToken.getName());
-
-        // Handle user login/upsert logic
-        User user = userService.handleOAuthLogin(oauthToken, client);
-        calendarContext.setAuthorizedClient(client);
-
-        // Generate new JWT for this user
-        String jwtToken = userService.createJwtFor(user);
-        response.sendRedirect("/chat-ui?token=" + jwtToken);
+    if (!(authentication instanceof OAuth2AuthenticationToken oauthToken)) {
+        response.sendError(SC_UNAUTHORIZED, "Authentication failed");
+        return;
     }
+
+    OAuth2AuthorizedClient client = clientService.loadAuthorizedClient(
+            oauthToken.getAuthorizedClientRegistrationId(),
+            oauthToken.getName()
+    );
+
+    if (client == null || client.getAccessToken() == null) {
+        response.sendError(SC_UNAUTHORIZED, "Missing authorized client");
+        return;
+    }
+
+    log.info("✅ Google OAuth2 login successful for {}", oauthToken.getName());
+
+    // Handle user login/upsert logic
+    User user = userService.handleOAuthLogin(oauthToken, client);
+    calendarContext.setAuthorizedClient(client);
+
+    // Generate new JWT for this user
+    String jwtToken = userService.createJwtFor(user);
+
+    // כתובת ה-frontend ב-CloudFront
+    String frontendUrl = "https://calendargpt.org/app/index.html";
+
+    // הפניה ישירה ל-frontend עם הטוקן
+    response.sendRedirect(frontendUrl + "?token=" + jwtToken);
+}
+
 }
