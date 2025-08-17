@@ -1,9 +1,15 @@
-name: Deploy to EC2
+name: Build, Push & Deploy to EC2
 
 on:
   push:
     branches:
-      - "**"   # תריץ רק על main, אפשר לשנות לסניף אחר
+      - "**"
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: barschtalman/calendergpt
+  IMAGE_TAG_SHA: ${{ github.sha }}
+  IMAGE_TAG_VER: v1.${{ github.run_number }}
 
 jobs:
   deploy:
@@ -13,19 +19,35 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: |
-          IMAGE_NAME=barschtalman/calendergpt
-          IMAGE_TAG=${{ github.sha }}
-          docker build -t $IMAGE_NAME:$IMAGE_TAG .
+      # בונים את ה-JAR (ללא טסטים כדי להימנע מתלות במפתחות/CI)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
 
-      - name: Push Docker image to Docker Hub
+      - name: Build JAR with Maven (skip tests)
+        run: mvn -B clean install -DskipTests
+
+      # בונים ומעלים את הדוקר
+      - name: Docker login (Docker Hub)
         run: |
           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-          IMAGE_NAME=barschtalman/calendergpt
-          IMAGE_TAG=${{ github.sha }}
-          docker push $IMAGE_NAME:$IMAGE_TAG
 
+      - name: Build Docker image
+        run: |
+          docker build -t "${IMAGE_NAME}:${IMAGE_TAG_SHA}" .
+          docker tag "${IMAGE_NAME}:${IMAGE_TAG_SHA}" "${IMAGE_NAME}:${IMAGE_TAG_VER}"
+          docker tag "${IMAGE_NAME}:${IMAGE_TAG_SHA}" "${IMAGE_NAME}:latest"
+
+      - name: Push Docker image
+        run: |
+          docker push "${IMAGE_NAME}:${IMAGE_TAG_SHA}"
+          docker push "${IMAGE_NAME}:${IMAGE_TAG_VER}"
+          docker push "${IMAGE_NAME}:latest"
+
+      # דיפלוי ל-EC2
       - name: Deploy on EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -33,27 +55,45 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
+          script_stop: true
           script: |
             set -euo pipefail
             set -x
 
-            IMAGE_NAME="barschtalman/calendergpt"
-            IMAGE_TAG="${{ github.sha }}"
-            COMPOSE_DIR="${{ secrets.EC2_COMPOSE_DIR }}"
+            IMAGE_NAME="${IMAGE_NAME}"
+            # בחר איזה טאג להטמיע ב-compose (כאן נשתמש בגרסת קאונטר)
+            IMAGE_TAG="${IMAGE_TAG_VER}"
+
+            # מנקים סוף-שורה/רווחים מה-secret של הנתיב
+            COMPOSE_DIR="$(printf '%s' "${{ secrets.EC2_COMPOSE_DIR }}" | tr -d '\r\n' | sed -e 's/[[:space:]]*$//')"
 
             echo "Deploying ${IMAGE_NAME}:${IMAGE_TAG} in ${COMPOSE_DIR}"
+            cd "$COMPOSE_DIR" || { echo "Invalid COMPOSE_DIR: $COMPOSE_DIR"; exit 1; }
 
-            cd "$COMPOSE_DIR"
+            # בודקים בצורה "לא הורגת" מה מותקן: docker compose / docker-compose
+            set +e
+            docker compose version >/dev/null 2>&1
+            has_plugin=$?
+            docker-compose version >/dev/null 2>&1
+            has_v1=$?
+            set -e
 
-            # בדיקה אם יש docker-compose או docker compose
-            if command -v docker-compose >/dev/null 2>&1; then
+            if [ $has_plugin -eq 0 ]; then
+              DC="docker compose"
+            elif [ $has_v1 -eq 0 ]; then
               DC="docker-compose"
             else
-              DC="docker compose"
+              echo "ERROR: docker compose/docker-compose not installed on host."
+              exit 1
             fi
 
-            # עדכון ה-image ב-service
-            sed -i "s|image:\s*${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g" docker-compose.yml
+            # מעדכנים את התמונה ב-service: appserver
+            if grep -qE "image:\s*${IMAGE_NAME}:" docker-compose.yml; then
+              sed -i "s|image:\s*${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g" docker-compose.yml
+            else
+              # אם אין שורת image, מזריקים אחת אחרי שם השירות appserver:
+              sed -i "s|^\(\s*appserver:\)|\1\n    image: ${IMAGE_NAME}:${IMAGE_TAG}|g" docker-compose.yml
+            fi
 
             $DC pull appserver
             $DC up -d appserver
