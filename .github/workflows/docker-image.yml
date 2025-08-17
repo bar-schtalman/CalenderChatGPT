@@ -56,7 +56,7 @@ jobs:
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}     # למשל ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}       # תוכן ה-PEM
+          key: ${{ secrets.SSH_KEY }}       # תוכן ה-PEM
           port: 22
           script_stop: true
           envs: IMAGE_NAME,IMAGE_TAG_VER
