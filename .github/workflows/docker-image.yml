@@ -3,7 +3,7 @@ name: Build, Push & Deploy to EC2
 on:
   push:
     branches:
-      - main
+      - "**"
   workflow_dispatch:
 
 env:
