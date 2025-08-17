@@ -3,7 +3,7 @@ name: Build & Push to Docker Hub
 on:
   push:
     branches:
-      - '**'   # ירוץ על כל branch
+      - '**'
 
 env:
   IMAGE_NAME: barschtalman/calendergpt
@@ -22,6 +22,18 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
+
+      - name: Prepare JWT keys
+        run: |
+          mkdir -p keys
+          printf '%s\n' "${{ secrets.JWT_PRIVATE_KEY_PEM }}" > keys/private_key.pem
+          printf '%s\n' "${{ secrets.JWT_PUBLIC_KEY_PEM }}" > keys/public_key.pem
+          chmod 600 keys/private_key.pem keys/public_key.pem
+
+      - name: Sanity check
+        run: |
+          ls -l keys
+          head -n 2 keys/public_key.pem || true
 
       - name: Build with Maven
         run: mvn -B clean install
