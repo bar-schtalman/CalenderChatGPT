@@ -45,7 +45,7 @@ jobs:
 
             cd "$COMPOSE_DIR"
 
-            # בדיקה אם יש docker-compose או רק docker compose
+            # בדיקה אם יש docker-compose או docker compose
             if command -v docker-compose >/dev/null 2>&1; then
               DC="docker-compose"
             else
