@@ -23,10 +23,10 @@ jobs:
       - name: Build with Maven (skip tests)
         run: mvn -B -ntp clean package -DskipTests
 
-      # מייצרים BRANCH_SLUG ללא / כדי שיתאים ל-tag של Docker
+      # BRANCH_SLUG בלי '/', שנשתמש בו לתגיות הדוקר
       - name: Compute branch slug
-        run: |
-          echo "BRANCH_SLUG=${GITHUB_REF_NAME//\//-}" >> $GITHUB_ENV
+        id: slug
+        run: echo "BRANCH_SLUG=${GITHUB_REF_NAME//\//-}" >> $GITHUB_ENV
 
       - name: Docker meta (tags & labels)
         id: meta
@@ -34,11 +34,11 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
           tags: |
-            # tag לפי שם בראנץ' (מסונן) + latest
+            # תגית קבועה לכל בראנץ'
             type=raw,value=${{ env.BRANCH_SLUG }}-latest
-            # tag נוסף לפי SHA מקוצר (נוח לדיבוג)
+            # תגית לפי ה-SHA (נוח לרגרסיות)
             type=sha,format=short,prefix=${{ env.BRANCH_SLUG }}-
-            # 'latest' רק כשבודקים ל-main
+            # 'latest' רגיל רק ל-main
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Set up Buildx
@@ -56,7 +56,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          platforms: linux/amd64      # חשוב ל-EC2 מבוסס x86_64
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
@@ -72,26 +72,32 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             set -euo pipefail
+            set -x
 
-            cd "${{ secrets.EC2_COMPOSE_DIR }}"
+            WORKDIR="${{ secrets.EC2_COMPOSE_DIR }}"
+            cd "$WORKDIR"
 
-            # ודא שזו תיקיית הפרויקט עם docker-compose.yml
-            if [ ! -f docker-compose.yml ]; then
-              echo "ERROR: docker-compose.yml not found in $PWD"
-              exit 1
-            fi
+            # ודא שיש docker-compose.yml
+            test -f docker-compose.yml || { echo "ERROR: docker-compose.yml not found in $PWD"; exit 1; }
 
-            echo "==> כותב .env לקומפוז (image + סודות)"
-            cat > .env << 'EOF'
+            # חישוב BRANCH_SLUG גם בצד ה-EC2 (אותו כלל)
+            BRANCH='${{ github.ref_name }}'
+            BRANCH_SLUG="${BRANCH//\//-}"
+            echo "BRANCH=$BRANCH"
+            echo "BRANCH_SLUG=$BRANCH_SLUG"
+
+            echo "==> כתיבת .env לקומפוז (image + סודות)"
+            # שים לב: כאן אנחנו כן מרשים הרחבת משתנים (BRANCH_SLUG) כדי להימנע מ-'-latest'
+            cat > .env <<EOF
             CALGPT_IMAGE_REPO=${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
-            CALGPT_IMAGE_TAG=${{ env.BRANCH_SLUG }}-latest
+            CALGPT_IMAGE_TAG=${BRANCH_SLUG}-latest
 
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
             EOF
 
-            echo "==> כותב מפתחות JWT ל- /opt/calendargpt/keys"
+            echo "==> כתיבת מפתחות JWT ל- /opt/calendargpt/keys"
             sudo install -d -m 700 /opt/calendargpt/keys
             sudo bash -lc 'cat > /opt/calendargpt/keys/private_key.pem << "EOF"
             ${{ secrets.JWT_PRIVATE_KEY_PEM }}
@@ -102,16 +108,19 @@ jobs:
             EOF
             chmod 644 /opt/calendargpt/keys/public_key.pem'
 
-            echo "==> docker login (אם הריפו פרטי)"
+            echo "==> docker login (אם צריך)"
             if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
               echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
             fi
 
-            echo "==> משיכה והרמה מחדש בכוח"
-            docker compose pull server || true
-            docker compose up -d --no-deps --force-recreate --pull always server
+            echo "==> שירותים בקומפוז:"
+            docker compose config --services || true
 
-            echo "==> סטטוס לאחר הדיפלוי"
+            echo "==> pull & up (כל השירותים, בלי לנעול על 'server')"
+            docker compose pull || true
+            docker compose up -d --remove-orphans --pull always
+
+            echo "==> סטטוס"
             docker compose images || true
             docker compose ps || true
 
