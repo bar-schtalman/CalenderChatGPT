@@ -1,11 +1,18 @@
-name: Build & Deploy to EC2
+name: Build and Deploy
 
 on:
   push:
-    branches: ["**"]   # רץ על כל בראנץ'
+    branches:
+      - master   # דמוי הדוגמה: רץ רק על master
+
+env:
+  # תגית גרסה עם קאונטר ריצה (לצד latest)
+  APP_VERSION: v1.${{ github.run_number }}
+  IMAGE_REPO: ${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
 
 jobs:
-  build_and_push:
+  build:
+    name: Build & Push
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,27 +30,10 @@ jobs:
       - name: Build with Maven (skip tests)
         run: mvn -B -ntp clean package -DskipTests
 
-      # BRANCH_SLUG בלי '/', לשימוש בתגיות
-      - name: Compute branch slug
-        id: slug
-        run: echo "BRANCH_SLUG=${GITHUB_REF_NAME//\//-}" >> $GITHUB_ENV
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-      - name: Docker meta (tags & labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
-          tags: |
-            # תגית יציבה לפי בראנץ'
-            type=raw,value=${{ env.BRANCH_SLUG }}-latest
-            # תגית לפי SHA (נוח לרגרסיות קטנות)
-            type=sha,format=short,prefix=${{ env.BRANCH_SLUG }}-
-            # תגית בלתי-משתנה עם קאונטר ריצה
-            type=raw,value=${{ env.BRANCH_SLUG }}-v1.${{ github.run_number }}
-            # latest כללי רק ל-main
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Set up Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
@@ -52,21 +42,23 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build & Push image
+      - name: Build & Push (mutable + immutable tags)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
           platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.IMAGE_REPO }}:${{ env.APP_VERSION }}
+            ${{ env.IMAGE_REPO }}:latest
 
   deploy:
-    needs: build_and_push
+    name: Deploy to EC2
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: SSH & deploy on EC2
+      - name: SSH & deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -79,22 +71,16 @@ jobs:
             WORKDIR="${{ secrets.EC2_COMPOSE_DIR }}"
             cd "$WORKDIR"
 
-            # ודא שקובץ compose קיים
             test -f docker-compose.yml || { echo "ERROR: docker-compose.yml not found in $PWD"; exit 1; }
 
-            # חישוב BRANCH_SLUG זהה לצד ה-CI
-            BRANCH='${{ github.ref_name }}'
-            BRANCH_SLUG="${BRANCH//\//-}"
-            RUN_NO='${{ github.run_number }}'
-            echo "BRANCH=$BRANCH"
-            echo "BRANCH_SLUG=$BRANCH_SLUG"
-            echo "RUN_NO=$RUN_NO"
+            # פרמטרים מה-Workflow
+            IMAGE_REPO='${{ env.IMAGE_REPO }}'
+            APP_VERSION='${{ env.APP_VERSION }}'
+            FULL_TAG="${IMAGE_REPO}:${APP_VERSION}"
 
-            # הגדרות image:repo/tag (תגית בלתי-משתנה עם קאונטר)
-            IMG_REPO="${{ secrets.DOCKERHUB_USERNAME }}/calendergpt"
-            IMG_TAG="${BRANCH_SLUG}-v1.${RUN_NO}"
+            echo "==> יעד הפריסה: ${FULL_TAG}"
 
-            echo "==> כתיבת .env עבור סודות האפליקציה"
+            echo "==> כתיבת .env לסודות (אם בשימוש ב-compose)"
             cat > .env <<EOF
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
@@ -117,27 +103,20 @@ jobs:
               echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
             fi
 
-            # כתיבת קובץ override כך שנריץ את האפליקציה בתגית המדויקת של הריצה
-            # גם אם ב-compose המקורי כתוב :latest
-            echo "==> יצירת docker-compose.override.yml עם image מדויק"
-            cat > docker-compose.override.yml <<EOF
-            services:
-              appserver:
-                image: ${IMG_REPO}:${IMG_TAG}
-            EOF
+            echo "==> עדכון docker-compose.yml לתגית הספציפית (sed)"
+            # מחליף כל tag אחרי <repo>: לטאג הספציפי; תופס גם עם וגם בלי מרכאות
+            sed -i -E "s|(image:\s*[\"']?${IMAGE_REPO}:)[^\"']+|\1${APP_VERSION}|g" docker-compose.yml
 
-            echo "==> DOWN לכל הסטאק (וניקוי יתומים)"
+            echo "==> DOWN (וניקוי יתומים)"
             docker compose down --remove-orphans
 
-            echo "==> משיכת אימג׳ים העדכניים"
-            # עכשיו pull יביא את התגית הספציפית בזכות ה-override
+            echo "==> PULL (יביא את התגית המעודכנת מה-compose)"
             docker compose pull
 
-            echo "==> הרמה נקייה (יש לך healthcheck ל-Postgres + depends_on:healthy)"
-            # אם יש healthcheck ל-DB (יש), --wait יחכה לבריאות השירותים
+            echo "==> UP (יש לך healthcheck ל-Postgres, אז --wait יעבוד מצוין)"
             docker compose up -d --wait
 
-            echo "==> ניקוי אימג׳ים לא בשימוש (לא חובה)"
+            echo "==> ניקוי אימג׳ים לא בשימוש"
             docker image prune -af || true
 
             echo "==> סטטוס"
