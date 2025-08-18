@@ -55,19 +55,23 @@ jobs:
           docker push "${IMAGE_NAME}:${IMAGE_TAG_VER}"
           docker push "${IMAGE_NAME}:latest"
 
-      # Deploy to EC2
+      # Deploy to EC2 (secrets passed via envs, no ${{ }} inside script)
       - name: Deploy on EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           IMAGE_TAG_VER: ${{ env.IMAGE_TAG_VER }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script_stop: true
-          envs: IMAGE_NAME,IMAGE_TAG_VER
+          # pass these envs into the remote session:
+          envs: IMAGE_NAME,IMAGE_TAG_VER,OPENAI_API_KEY,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET
           script: |
             set -euo pipefail
             set -x
@@ -83,10 +87,10 @@ jobs:
 
             # write .env on the server (compose auto-loads it)
             umask 077
-            cat > .env << 'EOF'
-OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
-GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+            cat > .env << EOF
+OPENAI_API_KEY=$OPENAI_API_KEY
+GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
 TZ=Asia/Jerusalem
 EOF
 
