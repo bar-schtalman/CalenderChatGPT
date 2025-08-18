@@ -35,29 +35,44 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
-                                    FilterChain chain)
-            throws ServletException, IOException {
+                                    FilterChain chain) throws ServletException, IOException {
+        String path = request.getServletPath();
 
-        final String authHeader = request.getHeader("Authorization");
+        // 1) לדלג על נתיבים ציבוריים ו-OPTIONS
+        boolean isPublic =
+                "OPTIONS".equalsIgnoreCase(request.getMethod()) ||
+                        path.equals("/api/health") ||
+                        path.startsWith("/api/swagger-ui") ||
+                        path.startsWith("/api/v3/api-docs") ||
+                        path.equals("/api/auth/google/login") ||
+                        path.startsWith("/login/oauth2/") ||
+                        path.startsWith("/oauth2/") ||
+                        path.startsWith("/actuator/health"); // אם באמת פתוח אצלך
 
-        // ❗ אין טוקן? אל תזרוק 401; תן ל-chain להתקדם (נתיבים ציבוריים/לא מוגנים)
+        if (isPublic) {
+            chain.doFilter(request, response);
+            return;
+        }
+
+        // 2) אם אין Authorization Bearer — ממשיכים בלי לאמת (לא מחזירים 401 פה!)
+        String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             chain.doFilter(request, response);
             return;
         }
 
-        String jwt = authHeader.substring(7);
         try {
-            // ✅ אמת את הטוקן והצב Authentication בקונטקסט
-            var authentication = jwtTokenUtil.buildAuthentication(jwt); // ← ודא שקיימת מתודה שיוצרת UsernamePasswordAuthenticationToken עם Authorities
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+            String token = authHeader.substring(7);
+            // TODO: לאמת את ה-JWT, להוציא user/authorities, ולהגדיר Authentication ב-SecurityContext
+            // SecurityContextHolder.getContext().setAuthentication(authentication);
 
             chain.doFilter(request, response);
-        } catch (JwtException ex) {
-            jwtAuthenticationEntryPoint.commence(
-                request, response,
-                new BadCredentialsException("Invalid or expired JWT", ex)
-            );
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            // טוקן לא תקין: לא שולחים 401 מפה. מנקים הקשר וממשיכים.
+            SecurityContextHolder.clearContext();
+            chain.doFilter(request, response);
+            // אם הנתיב מוגן, Spring יחזיר 401 דרך ה-EntryPoint שהגדרת.
         }
     }
+
 }
