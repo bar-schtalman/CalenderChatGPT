@@ -3,12 +3,11 @@ name: Build and Deploy
 on:
   push:
     branches:
-      - master   # דמוי הדוגמה: רץ רק על master
+      - "**"            # רץ על כל בראנץ'
 
 env:
-  # תגית גרסה עם קאונטר ריצה (לצד latest)
-  APP_VERSION: v1.${{ github.run_number }}
   IMAGE_REPO: ${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
+  APP_VERSION: v1.${{ github.run_number }}   # תגית בלתי-משתנה לכל ריצה
 
 jobs:
   build:
@@ -42,7 +41,8 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build & Push (mutable + immutable tags)
+      # דוחפים גם תגית גרסה ייחודית (v1.X) וגם latest
+      - name: Build & Push (immutable + latest)
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -73,18 +73,11 @@ jobs:
 
             test -f docker-compose.yml || { echo "ERROR: docker-compose.yml not found in $PWD"; exit 1; }
 
-            # פרמטרים מה-Workflow
-            IMAGE_REPO='${{ env.IMAGE_REPO }}'
-            APP_VERSION='${{ env.APP_VERSION }}'
-            FULL_TAG="${IMAGE_REPO}:${APP_VERSION}"
-
-            echo "==> יעד הפריסה: ${FULL_TAG}"
-
-            echo "==> כתיבת .env לסודות (אם בשימוש ב-compose)"
+            # נזין את המשתנים לקומפוז דרך .env (אין override ואין sed)
             cat > .env <<EOF
-            IMAGE_REPO=${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
+            IMAGE_REPO=${{ env.IMAGE_REPO }}
+            APP_VERSION=${{ env.APP_VERSION }}
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            APP_VERSION=${{ env.APP_VERSION }}   
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
             EOF
@@ -105,17 +98,13 @@ jobs:
               echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
             fi
 
-            echo "==> עדכון docker-compose.yml לתגית הספציפית (sed)"
-            # מחליף כל tag אחרי <repo>: לטאג הספציפי; תופס גם עם וגם בלי מרכאות
-            sed -i -E "s|(image:\s*[\"']?${IMAGE_REPO}:)[^\"']+|\1${APP_VERSION}|g" docker-compose.yml
-
             echo "==> DOWN (וניקוי יתומים)"
             docker compose down --remove-orphans
 
-            echo "==> PULL (יביא את התגית המעודכנת מה-compose)"
+            echo "==> PULL לפי ה-.env (יביא את ${IMAGE_REPO}:${APP_VERSION})"
             docker compose pull
 
-            echo "==> UP (יש לך healthcheck ל-Postgres, אז --wait יעבוד מצוין)"
+            echo "==> UP (עם healthcheck ל-Postgres, אפשר --wait)"
             docker compose up -d --wait
 
             echo "==> ניקוי אימג׳ים לא בשימוש"
