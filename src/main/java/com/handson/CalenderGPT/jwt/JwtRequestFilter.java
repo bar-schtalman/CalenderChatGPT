@@ -31,6 +31,19 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         return request.getServletPath().startsWith("/actuator/");
     }
 
+    	// בתוך JwtRequestFilter (OncePerRequestFilter)
+@Override
+protected boolean shouldNotFilter(HttpServletRequest req) {
+    String p = req.getServletPath();
+    return p.startsWith("/api/auth/")
+        || p.startsWith("/oauth2/")
+        || p.startsWith("/login/oauth2/")
+        || p.startsWith("/api/swagger-ui/")
+        || p.startsWith("/api/v3/api-docs")
+        || p.equals("/api/health")
+        || p.startsWith("/actuator/");
+}
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
