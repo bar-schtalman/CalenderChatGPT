@@ -3,7 +3,7 @@ version: "3.9"
 services:
   server:
     image: ${CALGPT_IMAGE_REPO}:${CALGPT_IMAGE_TAG}
-    container_name: calendargpt-server
+    container_name: server
     restart: unless-stopped
 
     # השרת מאזין ב-8080 (CloudFront → EC2:8080)
