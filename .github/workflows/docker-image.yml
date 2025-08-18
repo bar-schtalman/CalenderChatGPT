@@ -87,7 +87,7 @@ jobs:
             echo "BRANCH_SLUG=$BRANCH_SLUG"
 
             echo "==> כתיבת .env לקומפוז (image + סודות)"
-            # שים לב: כאן אנחנו כן מרשים הרחבת משתנים (BRANCH_SLUG) כדי להימנע מ-'-latest'
+            # מרשים הרחבת משתנים (BRANCH_SLUG) כדי לקבל <branch>-latest
             cat > .env <<EOF
             CALGPT_IMAGE_REPO=${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
             CALGPT_IMAGE_TAG=${BRANCH_SLUG}-latest
@@ -113,16 +113,26 @@ jobs:
               echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
             fi
 
-            echo "==> שירותים בקומפוז:"
-            docker compose config --services || true
+            echo "==> DOWN לכל הסטאק (server + postgres) וניקוי יתומים"
+            docker compose down --remove-orphans
 
-            echo "==> pull & up (כל השירותים, בלי לנעול על 'server')"
-            docker compose pull || true
-            docker compose up -d --remove-orphans --pull always
+            echo "==> משיכת אימג׳ים העדכניים"
+            # מושכים את כל השירותים לפי מה שמוגדר ב-compose, כולל תגית <branch>-latest ל-server
+            docker compose pull
+
+            echo "==> הרמה נקייה של Postgres + Server (בסדר הנכון)"
+            # אם יש healthcheck ל-Postgres אפשר פשוט --wait; אחרת נרים בהפרדה
+            docker compose up -d postgres
+            # המתנה קצרה ל-DB אם אין healthcheck
+            sleep 5 || true
+            docker compose up -d --force-recreate server
+
+            echo "==> ניקוי אימג׳ים לא בשימוש"
+            docker image prune -af || true
 
             echo "==> סטטוס"
+            docker compose ps
             docker compose images || true
-            docker compose ps || true
 
             echo "==> בדיקת בריאות מקומית"
             curl -fsS http://127.0.0.1:8080/api/health || true
