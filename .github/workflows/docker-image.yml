@@ -55,7 +55,6 @@ jobs:
           docker push "${IMAGE_NAME}:${IMAGE_TAG_VER}"
           docker push "${IMAGE_NAME}:latest"
 
-      # Deploy to EC2 (secrets passed via envs, no ${{ }} inside script)
       - name: Deploy on EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
@@ -64,37 +63,34 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          EC2_COMPOSE_DIR: ${{ secrets.EC2_COMPOSE_DIR }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script_stop: true
-          # pass these envs into the remote session:
-          envs: IMAGE_NAME,IMAGE_TAG_VER,OPENAI_API_KEY,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET
+          # ה-ENVים שמוזרקים לסשן המרוחק
+          envs: IMAGE_NAME,IMAGE_TAG_VER,OPENAI_API_KEY,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,EC2_COMPOSE_DIR
           script: |
             set -euo pipefail
             set -x
 
-            COMPOSE_DIR="$(printf '%s' "${{ secrets.EC2_COMPOSE_DIR }}" | tr -d '\r\n' | sed -e 's/[[:space:]]*$//')"
+            # מעבר לתיקיית ה-compose שעל השרת
+            COMPOSE_DIR="$(printf '%s' "$EC2_COMPOSE_DIR" | tr -d '\r\n' | sed -e 's/[[:space:]]*$//')"
             if [ -z "$COMPOSE_DIR" ]; then
-              echo "ERROR: EC2_COMPOSE_DIR secret is empty"
+              echo "ERROR: EC2_COMPOSE_DIR is empty"
               exit 1
             fi
-
             cd "$COMPOSE_DIR" || { echo "Invalid COMPOSE_DIR: $COMPOSE_DIR"; exit 1; }
             test -f docker-compose.yml || { echo "docker-compose.yml not found in $COMPOSE_DIR"; exit 1; }
 
-            # write .env on the server (compose auto-loads it)
+            # כתיבת .env בצורה בטוחה (ללא HEREDOC, ללא ${{ }})
             umask 077
-            cat > .env << EOF
-OPENAI_API_KEY=$OPENAI_API_KEY
-GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
-TZ=Asia/Jerusalem
-EOF
+            printf "OPENAI_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nGOOGLE_CLIENT_SECRET=%s\nTZ=Asia/Jerusalem\n" \
+              "$OPENAI_API_KEY" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" > .env
 
-            # detect compose binary
+            # זיהוי docker compose
             if command -v docker compose >/dev/null 2>&1; then
               DC="docker compose"
             elif command -v docker-compose >/dev/null 2>&1; then
@@ -104,7 +100,7 @@ EOF
               exit 1
             fi
 
-            # ensure image tag on appserver
+            # ווידוא שהתמונה של appserver מצביעה על התגית החדשה
             if grep -qE "image:[[:space:]]*${IMAGE_NAME}:" docker-compose.yml; then
               sed -i "s|image:[[:space:]]*${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${IMAGE_TAG_VER}|g" docker-compose.yml
             else
@@ -113,10 +109,13 @@ EOF
               ' docker-compose.yml > docker-compose.yml.tmp && mv docker-compose.yml.tmp docker-compose.yml
             fi
 
+            # משיכת האימג' והעלאה
             $DC pull appserver
             $DC up -d appserver
 
+            # ניקוי תמונות ישנות (לא קריטי אם נכשל)
             docker image prune -af || true
 
+            # סטטוס ולוגים קצרים
             $DC ps
             $DC logs --since=5m appserver || true
