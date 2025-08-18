@@ -23,7 +23,7 @@ jobs:
       - name: Build with Maven (skip tests)
         run: mvn -B -ntp clean package -DskipTests
 
-      # BRANCH_SLUG בלי '/', שנשתמש בו לתגיות הדוקר
+      # BRANCH_SLUG בלי '/', לשימוש בתגיות
       - name: Compute branch slug
         id: slug
         run: echo "BRANCH_SLUG=${GITHUB_REF_NAME//\//-}" >> $GITHUB_ENV
@@ -34,11 +34,13 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
           tags: |
-            # תגית קבועה לכל בראנץ'
+            # תגית יציבה לפי בראנץ'
             type=raw,value=${{ env.BRANCH_SLUG }}-latest
-            # תגית לפי ה-SHA (נוח לרגרסיות)
+            # תגית לפי SHA (נוח לרגרסיות קטנות)
             type=sha,format=short,prefix=${{ env.BRANCH_SLUG }}-
-            # 'latest' רגיל רק ל-main
+            # תגית בלתי-משתנה עם קאונטר ריצה
+            type=raw,value=${{ env.BRANCH_SLUG }}-v1.${{ github.run_number }}
+            # latest כללי רק ל-main
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Set up Buildx
@@ -77,21 +79,23 @@ jobs:
             WORKDIR="${{ secrets.EC2_COMPOSE_DIR }}"
             cd "$WORKDIR"
 
-            # ודא שיש docker-compose.yml
+            # ודא שקובץ compose קיים
             test -f docker-compose.yml || { echo "ERROR: docker-compose.yml not found in $PWD"; exit 1; }
 
-            # חישוב BRANCH_SLUG גם בצד ה-EC2 (אותו כלל)
+            # חישוב BRANCH_SLUG זהה לצד ה-CI
             BRANCH='${{ github.ref_name }}'
             BRANCH_SLUG="${BRANCH//\//-}"
+            RUN_NO='${{ github.run_number }}'
             echo "BRANCH=$BRANCH"
             echo "BRANCH_SLUG=$BRANCH_SLUG"
+            echo "RUN_NO=$RUN_NO"
 
-            echo "==> כתיבת .env לקומפוז (image + סודות)"
-            # מרשים הרחבת משתנים (BRANCH_SLUG) כדי לקבל <branch>-latest
+            # הגדרות image:repo/tag (תגית בלתי-משתנה עם קאונטר)
+            IMG_REPO="${{ secrets.DOCKERHUB_USERNAME }}/calendergpt"
+            IMG_TAG="${BRANCH_SLUG}-v1.${RUN_NO}"
+
+            echo "==> כתיבת .env עבור סודות האפליקציה"
             cat > .env <<EOF
-            CALGPT_IMAGE_REPO=${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
-            CALGPT_IMAGE_TAG=${BRANCH_SLUG}-latest
-
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
@@ -113,21 +117,27 @@ jobs:
               echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
             fi
 
-            echo "==> DOWN לכל הסטאק (server + postgres) וניקוי יתומים"
+            # כתיבת קובץ override כך שנריץ את האפליקציה בתגית המדויקת של הריצה
+            # גם אם ב-compose המקורי כתוב :latest
+            echo "==> יצירת docker-compose.override.yml עם image מדויק"
+            cat > docker-compose.override.yml <<EOF
+            services:
+              appserver:
+                image: ${IMG_REPO}:${IMG_TAG}
+            EOF
+
+            echo "==> DOWN לכל הסטאק (וניקוי יתומים)"
             docker compose down --remove-orphans
 
             echo "==> משיכת אימג׳ים העדכניים"
-            # מושכים את כל השירותים לפי מה שמוגדר ב-compose, כולל תגית <branch>-latest ל-server
+            # עכשיו pull יביא את התגית הספציפית בזכות ה-override
             docker compose pull
 
-            echo "==> הרמה נקייה של Postgres + Server (בסדר הנכון)"
-            # אם יש healthcheck ל-Postgres אפשר פשוט --wait; אחרת נרים בהפרדה
-            docker compose up -d postgres
-            # המתנה קצרה ל-DB אם אין healthcheck
-            sleep 5 || true
-            docker compose up -d --force-recreate appserver
+            echo "==> הרמה נקייה (יש לך healthcheck ל-Postgres + depends_on:healthy)"
+            # אם יש healthcheck ל-DB (יש), --wait יחכה לבריאות השירותים
+            docker compose up -d --wait
 
-            echo "==> ניקוי אימג׳ים לא בשימוש"
+            echo "==> ניקוי אימג׳ים לא בשימוש (לא חובה)"
             docker image prune -af || true
 
             echo "==> סטטוס"
