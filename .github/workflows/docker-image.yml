@@ -58,15 +58,11 @@ jobs:
           docker push "${IMAGE_NAME}:${IMAGE_TAG_VER}"
           docker push "${IMAGE_NAME}:latest"
 
-      - name: Deploy on EC2 via SSH
+      - name: Deploy on EC2 via SSH (no secrets in YAML)
         uses: appleboy/ssh-action@v1.0.3
         env:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           IMAGE_TAG_VER: ${{ env.IMAGE_TAG_VER }}
-          # עוברים דרך env של ה-step כדי לא לשים ${{ }} בתוך script:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           EC2_COMPOSE_DIR: ${{ secrets.EC2_COMPOSE_DIR }}
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -74,33 +70,17 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script_stop: true
-          # המשתנים שיכנסו לסשן המרוחק (שמות בלבד, בלי ${{
-          envs: IMAGE_NAME,IMAGE_TAG_VER,OPENAI_API_KEY,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,EC2_COMPOSE_DIR
+          envs: IMAGE_NAME,IMAGE_TAG_VER,EC2_COMPOSE_DIR
           script: |
             set -euo pipefail
             set -x
-
             COMPOSE_DIR="$(printf '%s' "$EC2_COMPOSE_DIR" | tr -d '\r\n' | sed -e 's/[[:space:]]*$//')"
             [ -n "$COMPOSE_DIR" ] || { echo "ERROR: EC2_COMPOSE_DIR empty"; exit 1; }
             cd "$COMPOSE_DIR" || { echo "Invalid dir: $COMPOSE_DIR"; exit 1; }
             [ -f docker-compose.yml ] || { echo "docker-compose.yml missing"; exit 1; }
+            [ -f .env ] || { echo ".env missing on server (create it once)"; exit 1; }
 
-            # כותבים .env בצורה בטוחה (ללא HEREDOC וללא ${{ }})
-            umask 077
-            printf "OPENAI_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nGOOGLE_CLIENT_SECRET=%s\nTZ=Asia/Jerusalem\n" \
-              "$OPENAI_API_KEY" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" > .env
-
-            # זיהוי compose
-            if command -v docker compose >/dev/null 2>&1; then
-              DC="docker compose"
-            elif command -v docker-compose >/dev/null 2>&1; then
-              DC="docker-compose"
-            else
-              echo "ERROR: docker compose/docker-compose not installed."
-              exit 1
-            fi
-
-            # עדכון תגית image בשירות appserver
+            # עדכון תגית image (לא נוגעים בסודות)
             if grep -qE "image:[[:space:]]*${IMAGE_NAME}:" docker-compose.yml; then
               sed -i "s|image:[[:space:]]*${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${IMAGE_TAG_VER}|g" docker-compose.yml
             else
@@ -109,9 +89,15 @@ jobs:
               ' docker-compose.yml > docker-compose.yml.tmp && mv docker-compose.yml.tmp docker-compose.yml
             fi
 
+            # משיכה והרצה
+            if command -v docker compose >/dev/null 2>&1; then
+              DC="docker compose"
+            else
+              DC="docker-compose"
+            fi
+
             $DC pull appserver
             $DC up -d appserver || { $DC logs appserver || true; exit 1; }
-
             docker image prune -af || true
             $DC ps
             $DC logs --since=5m appserver || true
