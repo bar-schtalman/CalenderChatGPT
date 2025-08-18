@@ -1,54 +1,44 @@
-version: "3.9"
+version: "3.8"
 
 services:
-  server:
-    image: ${CALGPT_IMAGE_REPO}:${CALGPT_IMAGE_TAG}
+  appserver:
     container_name: server
+    image: barschtalman/calendergpt:latest
     restart: unless-stopped
-
-    # השרת מאזין ב-8080 (CloudFront → EC2:8080)
     ports:
       - "8080:8080"
-
-    # מפתחות ה-JWT נטענים מהנתיב /keys כפי שמוגדר ב-application.properties
-    volumes:
-      - /opt/calendargpt/keys:/keys:ro
-
-    # משתני סביבה שהאפליקציה צריכה
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/calendar_gpt
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      JWT_PRIVATE_KEY_PATH: file:/keys/private_key.pem
+      JWT_PUBLIC_KEY_PATH: file:/keys/public_key.pem
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      # אופציונלי: לכוונון JVM
-      JAVA_OPTS: "-Xms256m -Xmx1024m"
+    depends_on:
+      - postgres
+    volumes:
+      - /opt/calendargpt/keys:/keys:ro
 
-    # תמיד למשוך אימג' חדש בהרצה
-    pull_policy: always
-
-    # Healthcheck בסיסי
+  postgres:
+    image: postgres:15
+    container_name: postgres-calendar
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: calendar_gpt
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/api/health"]
-      interval: 30s
+      test: ["CMD-SHELL", "pg_isready -U postgres -d calendar_gpt"]
+      interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 10
 
-    # לוגים עם רוטציה
-    logging:
-      options:
-        max-size: "10m"
-        max-file: "5"
-
-    labels:
-      # מאפשר עדכון אוטומטי אם תבחר להריץ Watchtower (לא חובה)
-      com.centurylinklabs.watchtower.enable: "true"
-
-# אופציונלי: עדכון אוטומטי של הקונטיינר כשיש אימג' חדש
-#  watchtower:
-#    image: containrrr/watchtower
-#    container_name: watchtower
-#    restart: unless-stopped
-#    volumes:
-#      - /var/run/docker.sock:/var/run/docker.sock
-#    command: --interval 60 --label-enable
+volumes:
+  pgdata:
