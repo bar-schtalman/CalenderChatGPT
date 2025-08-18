@@ -1,3 +1,0 @@
-services:
-  appserver:
-    image: barschtalman/calendergpt:master-v1.44
