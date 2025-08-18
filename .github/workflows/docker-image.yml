@@ -82,7 +82,9 @@ jobs:
 
             echo "==> כתיבת .env לסודות (אם בשימוש ב-compose)"
             cat > .env <<EOF
+            IMAGE_REPO=${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            APP_VERSION=${{ env.APP_VERSION }}   
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
             EOF
