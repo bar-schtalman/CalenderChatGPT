@@ -125,7 +125,7 @@ jobs:
             docker compose up -d postgres
             # המתנה קצרה ל-DB אם אין healthcheck
             sleep 5 || true
-            docker compose up -d --force-recreate server
+            docker compose up -d --force-recreate appserver
 
             echo "==> ניקוי אימג׳ים לא בשימוש"
             docker image prune -af || true
