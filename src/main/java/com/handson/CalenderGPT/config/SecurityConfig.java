@@ -1,91 +1,118 @@
 package com.handson.CalenderGPT.config;
 
-import org.springframework.http.HttpMethod;
 import com.handson.CalenderGPT.google.oauth.GoogleOAuthSuccessHandler;
 import com.handson.CalenderGPT.jwt.JwtAuthenticationEntryPoint;
 import com.handson.CalenderGPT.jwt.JwtRequestFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.filter.ForwardedHeaderFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
+@EnableWebSecurity
 public class SecurityConfig {
 
-    @Autowired
-    private JwtRequestFilter jwtRequestFilter;
+    private final JwtRequestFilter jwtRequestFilter;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final GoogleOAuthSuccessHandler googleOAuthSuccessHandler;
 
     @Autowired
-    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
-
-    @Autowired
-    private GoogleOAuthSuccessHandler googleOAuthSuccessHandler;
-
-    @Autowired
-    private ClientRegistrationRepository clientRegistrationRepository;
-
-    /**
-     * Tell Spring Security to completely ignore all /actuator/** requests,
-     * so they never hit the filter chain at all.
-     */
-    @Bean
-    public WebSecurityCustomizer webSecurityCustomizer() {
-        return web -> web.ignoring().requestMatchers("/actuator/**");
+    public SecurityConfig(
+            JwtRequestFilter jwtRequestFilter,
+            JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint,
+            GoogleOAuthSuccessHandler googleOAuthSuccessHandler
+    ) {
+        this.jwtRequestFilter = jwtRequestFilter;
+        this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
+        this.googleOAuthSuccessHandler = googleOAuthSuccessHandler;
     }
 
-    /**
-     * The main security filter chain for all other requests.
-     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-          .csrf(csrf -> csrf.disable())
-          .cors(cors -> cors.disable())
-          .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
-          .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-          .authorizeHttpRequests(auth -> auth
-              // public endpoints
-              .requestMatchers(
-                  "/", "/chat-ui", "/login/**", "/logout", "/oauth2/**",
-                  "/swagger-ui/**", "/v3/api-docs/**",
-                  "/favicon.ico", "/static/**",
-                  "/utils.js", "/apiClient.js", "/chatHandler.js", "/styles.css","/api/auth/**",
+            // CORS
+            .cors(Customizer.withDefaults())
+
+            // CSRF כבוי: אנחנו סטייטלס עם JWT
+            .csrf(csrf -> csrf.disable())
+
+            // 401 במקום redirect
+            .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+
+            // סטייטלס
+            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+            // הרשאות
+            .authorizeHttpRequests(auth -> auth
+                // לאפשר Preflight
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                // נתיבים ציבוריים (פתוחים):
+                .requestMatchers(
+                    "/api/auth/**",
                     "/oauth2/**",
                     "/login/oauth2/**",
                     "/api/swagger-ui/**",
                     "/api/v3/api-docs/**",
-                    "/api/health", "/api/chat-ui", "/api/login/**", "/api/oauth2/**","/api/swagger-ui/**"
-              ).permitAll()
-				.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-              .anyRequest().authenticated()
-          )
-          .oauth2Login(oauth2 -> oauth2
-              .authorizationEndpoint(authz ->
-                  authz.authorizationRequestResolver(
-                      new CustomAuthorizationRequestResolver(clientRegistrationRepository)
-                  )
-              )
-              .successHandler(googleOAuthSuccessHandler)
-          );
+                    "/api/health",
+                    "/actuator/health"
+                ).permitAll()
 
-        // JwtRequestFilter must come after the request is known not to be actuator
+                // כל היתר דורש אימות
+                .anyRequest().authenticated()
+            )
+
+            // OAuth2 Login (אם בשימוש; אפשר להשאיר מינימלי)
+            .oauth2Login(oauth2 -> oauth2
+                .successHandler(googleOAuthSuccessHandler)
+            );
+
+        // JWT לפני UsernamePasswordAuthenticationFilter
         http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration c = new CorsConfiguration();
+        // עדכן את הרשימה לפי הדומיינים שלך (כולל www)
+        c.setAllowedOrigins(List.of(
+            "https://ec2-stage.calendargpt.org",
+            "https://calendargpt.org",
+            "https://www.calendargpt.org"
+        ));
+        c.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
+        c.setAllowedHeaders(List.of("*"));
+        c.setExposedHeaders(List.of("Authorization","Location","Set-Cookie"));
+        c.setAllowCredentials(true);
+        c.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();
+        src.registerCorsConfiguration("/api/**", c);
+        src.registerCorsConfiguration("/oauth2/**", c);
+        src.registerCorsConfiguration("/login/oauth2/**", c);
+        src.registerCorsConfiguration("/actuator/**", c);
+        src.registerCorsConfiguration("/api/swagger-ui/**", c);
+        src.registerCorsConfiguration("/api/v3/api-docs/**", c);
+        return src;
     }
-	
 
-
+    // מאחורי CloudFront/ALB, שיעבד X-Forwarded-* (פרוטוקול/הוסט) נכון
+    @Bean
+    public ForwardedHeaderFilter forwardedHeaderFilter() {
+        return new ForwardedHeaderFilter();
+    }
 }
