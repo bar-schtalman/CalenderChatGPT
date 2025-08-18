@@ -3,20 +3,33 @@ version: "3.8"
 services:
   appserver:
     container_name: server
-    image: barschtalman/calendergpt:latest
+    # עדיף להצמיד גרסה (למשל v1.25) בשביל יציבות; אם בכל זאת רוצים אוטו-עדכון מכל push – השתמש ב: latest
+    image: barschtalman/calendergpt:v1.25
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      # חשוב: להשתמש בשם ה־service "postgres" (לא localhost)
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/calendar_gpt
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
+
+      # מאחורי CloudFront – שיקבל X-Forwarded-* כמו שצריך
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+
+      # JWT (כבר מונטת את /keys)
       JWT_PRIVATE_KEY_PATH: file:/keys/private_key.pem
       JWT_PUBLIC_KEY_PATH: file:/keys/public_key.pem
+
+      # מפתחות (יוזר/סוד) ו־Redirect של גוגל
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: https://ec2-stage.calendargpt.org/api/auth/google/callback
+
+      # אופציונלי אבל שימושי ל־redirects/קישורים בצד שרת
+      APP_BASE_URL: https://ec2-stage.calendargpt.org
     depends_on:
       - postgres
     volumes:
