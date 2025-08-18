@@ -3,7 +3,7 @@ version: "3.8"
 services:
   appserver:
     container_name: server
-    image: barschtalman/calendergpt:latest
+    image: "${IMAGE_REPO:-barschtalman/calendergpt}:${APP_VERSION:-latest}"
     restart: unless-stopped
     ports:
       - "8080:8080"
