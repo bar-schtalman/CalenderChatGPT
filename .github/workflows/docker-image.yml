@@ -30,8 +30,11 @@ jobs:
         run: mvn -B clean install -DskipTests
 
       - name: Docker login (Docker Hub)
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
       - name: Build Docker image
         env:
@@ -60,6 +63,7 @@ jobs:
         env:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           IMAGE_TAG_VER: ${{ env.IMAGE_TAG_VER }}
+          # עוברים דרך env של ה-step כדי לא לשים ${{ }} בתוך script:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
@@ -70,27 +74,23 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script_stop: true
-          # ה-ENVים שמוזרקים לסשן המרוחק
+          # המשתנים שיכנסו לסשן המרוחק (שמות בלבד, בלי ${{
           envs: IMAGE_NAME,IMAGE_TAG_VER,OPENAI_API_KEY,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,EC2_COMPOSE_DIR
           script: |
             set -euo pipefail
             set -x
 
-            # מעבר לתיקיית ה-compose שעל השרת
             COMPOSE_DIR="$(printf '%s' "$EC2_COMPOSE_DIR" | tr -d '\r\n' | sed -e 's/[[:space:]]*$//')"
-            if [ -z "$COMPOSE_DIR" ]; then
-              echo "ERROR: EC2_COMPOSE_DIR is empty"
-              exit 1
-            fi
-            cd "$COMPOSE_DIR" || { echo "Invalid COMPOSE_DIR: $COMPOSE_DIR"; exit 1; }
-            test -f docker-compose.yml || { echo "docker-compose.yml not found in $COMPOSE_DIR"; exit 1; }
+            [ -n "$COMPOSE_DIR" ] || { echo "ERROR: EC2_COMPOSE_DIR empty"; exit 1; }
+            cd "$COMPOSE_DIR" || { echo "Invalid dir: $COMPOSE_DIR"; exit 1; }
+            [ -f docker-compose.yml ] || { echo "docker-compose.yml missing"; exit 1; }
 
-            # כתיבת .env בצורה בטוחה (ללא HEREDOC, ללא ${{ }})
+            # כותבים .env בצורה בטוחה (ללא HEREDOC וללא ${{ }})
             umask 077
             printf "OPENAI_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nGOOGLE_CLIENT_SECRET=%s\nTZ=Asia/Jerusalem\n" \
               "$OPENAI_API_KEY" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" > .env
 
-            # זיהוי docker compose
+            # זיהוי compose
             if command -v docker compose >/dev/null 2>&1; then
               DC="docker compose"
             elif command -v docker-compose >/dev/null 2>&1; then
@@ -100,7 +100,7 @@ jobs:
               exit 1
             fi
 
-            # ווידוא שהתמונה של appserver מצביעה על התגית החדשה
+            # עדכון תגית image בשירות appserver
             if grep -qE "image:[[:space:]]*${IMAGE_NAME}:" docker-compose.yml; then
               sed -i "s|image:[[:space:]]*${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${IMAGE_TAG_VER}|g" docker-compose.yml
             else
@@ -109,13 +109,9 @@ jobs:
               ' docker-compose.yml > docker-compose.yml.tmp && mv docker-compose.yml.tmp docker-compose.yml
             fi
 
-            # משיכת האימג' והעלאה
             $DC pull appserver
-            $DC up -d appserver
+            $DC up -d appserver || { $DC logs appserver || true; exit 1; }
 
-            # ניקוי תמונות ישנות (לא קריטי אם נכשל)
             docker image prune -af || true
-
-            # סטטוס ולוגים קצרים
             $DC ps
             $DC logs --since=5m appserver || true
