@@ -1,124 +1,130 @@
-name: Build, Push & Deploy to EC2
+name: Build & Deploy to EC2
 
 on:
   push:
-    branches:
-      - "**"
-  workflow_dispatch:
-
-env:
-  IMAGE_NAME: barschtalman/calendergpt
-  IMAGE_TAG_SHA: ${{ github.sha }}
-  IMAGE_TAG_VER: v1.${{ github.run_number }}
+    branches: ["**"]   # רץ על כל בראנץ'
 
 jobs:
-  deploy:
+  build_and_push:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
           java-version: '17'
+          distribution: 'temurin'
           cache: maven
 
-      - name: Build JAR with Maven (skip tests)
-        run: mvn -B clean install -DskipTests
+      - name: Build with Maven (skip tests)
+        run: mvn -B -ntp clean package -DskipTests
 
-      - name: Docker login (Docker Hub)
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+      - name: Docker meta (tags & labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
+          tags: |
+            # תגים לפי שם בראנץ'
+            type=raw,value=${{ github.ref_name }}-latest
+            # תגים לפי SHA מקוצר + שם בראנץ'
+            type=sha,format=short,prefix=${{ github.ref_name }}-
+            # 'latest' רק כשהבראנץ' הוא main
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
 
-      - name: Build Docker image
-        env:
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          IMAGE_TAG_SHA: ${{ env.IMAGE_TAG_SHA }}
-          IMAGE_TAG_VER: ${{ env.IMAGE_TAG_VER }}
-        run: |
-          set -euo pipefail
-          docker build -t "${IMAGE_NAME}:${IMAGE_TAG_SHA}" .
-          docker tag "${IMAGE_NAME}:${IMAGE_TAG_SHA}" "${IMAGE_NAME}:${IMAGE_TAG_VER}"
-          docker tag "${IMAGE_NAME}:${IMAGE_TAG_SHA}" "${IMAGE_NAME}:latest"
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Push Docker image
-        env:
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          IMAGE_TAG_SHA: ${{ env.IMAGE_TAG_SHA }}
-          IMAGE_TAG_VER: ${{ env.IMAGE_TAG_VER }}
-        run: |
-          set -euo pipefail
-          docker push "${IMAGE_NAME}:${IMAGE_TAG_SHA}"
-          docker push "${IMAGE_NAME}:${IMAGE_TAG_VER}"
-          docker push "${IMAGE_NAME}:latest"
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Deploy on EC2 via SSH
+      - name: Build & Push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile         # שנה אם ה-Dockerfile לא בשורש
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    needs: build_and_push
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH & deploy on EC2
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          IMAGE_TAG_VER: ${{ env.IMAGE_TAG_VER }}
-          EC2_COMPOSE_DIR: ${{ secrets.EC2_COMPOSE_DIR }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.SSH_KEY }}
-          port: 22
-          script_stop: true
-          # מעביר את ה-envs אל הסשן המרוחק (שמות בלבד)
-          envs: IMAGE_NAME,IMAGE_TAG_VER,EC2_COMPOSE_DIR,OPENAI_API_KEY,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET
           script: |
             set -euo pipefail
-            set -x
 
-            # תיקיית ה-compose על השרת
-            COMPOSE_DIR="$(printf '%s' "$EC2_COMPOSE_DIR" | tr -d '\r\n' | sed -e 's/[[:space:]]*$//')"
-            [ -n "$COMPOSE_DIR" ] || { echo "ERROR: EC2_COMPOSE_DIR empty"; exit 1; }
-            cd "$COMPOSE_DIR" || { echo "Invalid dir: $COMPOSE_DIR"; exit 1; }
+            cd "${{ secrets.EC2_COMPOSE_DIR }}"
 
-            # דיבוג: מה יש כאן
-            pwd
-            ls -la
-            [ -f docker-compose.yml ] || { echo "docker-compose.yml missing"; exit 1; }
-
-            # כותב/מעדכן .env בבעלות המשתמש וההרשאות הנכונות (ללא HEREDOC)
-            umask 077
-            printf "OPENAI_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nGOOGLE_CLIENT_SECRET=%s\nTZ=Asia/Jerusalem\n" \
-              "$OPENAI_API_KEY" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" > .env
-            chown "$(id -u)":"$(id -g)" .env
-            chmod 600 .env
-
-            # זיהוי docker compose
-            if command -v docker compose >/dev/null 2>&1; then
-              DC="docker compose"
-            elif command -v docker-compose >/dev/null 2>&1; then
-              DC="docker-compose"
-            else
-              echo "ERROR: docker compose/docker-compose not installed."
+            if [ ! -d .git ]; then
+              echo "ERROR: .git not found in $PWD (EC2_COMPOSE_DIR). Clone the repo here once."
               exit 1
             fi
 
-            # עדכון תגית image בשירות appserver (אם אין — מוסיף)
-            if grep -qE "image:[[:space:]]*${IMAGE_NAME}:" docker-compose.yml; then
-              sed -i "s|image:[[:space:]]*${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${IMAGE_TAG_VER}|g" docker-compose.yml
-            else
-              awk -v img="    image: ${IMAGE_NAME}:${IMAGE_TAG_VER}" '
-                $0 ~ /^[[:space:]]*appserver:/ && ins==0 { print; print img; ins=1; next }1
-              ' docker-compose.yml > docker-compose.yml.tmp && mv docker-compose.yml.tmp docker-compose.yml
+            echo "==> git fetch + pull לכל בראנץ' עם upstream"
+            git fetch --all --prune
+            ORIG_BRANCH="$(git symbolic-ref -q --short HEAD || true)"
+            git for-each-ref --format='%(refname:short) %(upstream:short)' refs/heads | while read -r LOCAL UPSTREAM; do
+              [ -n "$UPSTREAM" ] || continue
+              echo "---- pulling $LOCAL"
+              git checkout "$LOCAL"
+              git pull --ff-only || true
+            done
+
+            # בראנץ' לפריסה: אם קבעת DEPLOY_BRANCH ב-Secrets – נשתמש בו, אחרת נשאיר את המקורי
+            if [ -n "${{ secrets.DEPLOY_BRANCH }}" ]; then
+              git checkout "${{ secrets.DEPLOY_BRANCH }}"
+              git pull --ff-only || true
+            elif [ -n "$ORIG_BRANCH" ]; then
+              git checkout "$ORIG_BRANCH"
             fi
 
-            # משיכה והרצה
-            $DC pull appserver
-            $DC up -d appserver || { $DC logs appserver || true; exit 1; }
+            echo "==> כותב .env לקומפוז (כולל tag לאימג' + סודות)"
+            cat > .env << 'EOF'
+            # תגית האימג' שהרגע דחפנו: <branch>-latest
+            CALGPT_IMAGE_REPO=${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
+            CALGPT_IMAGE_TAG=${{ github.ref_name }}-latest
 
-            docker image prune -af || true
-            $DC ps
-            $DC logs --since=5m appserver || true
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+            GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+            EOF
+
+            echo "==> כותב מפתחות JWT ל- /opt/calendargpt/keys"
+            sudo install -d -m 700 /opt/calendargpt/keys
+            sudo bash -lc 'cat > /opt/calendargpt/keys/private_key.pem << "EOF"
+            ${{ secrets.JWT_PRIVATE_KEY_PEM }}
+            EOF
+            chmod 600 /opt/calendargpt/keys/private_key.pem'
+            sudo bash -lc 'cat > /opt/calendargpt/keys/public_key.pem << "EOF"
+            ${{ secrets.JWT_PUBLIC_KEY_PEM }}
+            EOF
+            chmod 644 /opt/calendargpt/keys/public_key.pem'
+
+            echo "==> docker login (במידה והאימג' פרטי)"
+            if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+              echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            fi
+
+            echo "==> docker compose pull & up"
+            docker compose pull
+            docker compose up -d --remove-orphans
+
+            echo "==> ניקוי תמונות ישנות (אופציונלי)"
+            docker image prune -f || true
+
+            echo "==> בדיקת בריאות מקומית"
+            curl -fsS http://127.0.0.1:8080/api/health || true
