@@ -5,6 +5,10 @@ on:
     branches:
       - "**"            # רץ על כל בראנץ'
 
+concurrency:
+  group: build-and-deploy
+  cancel-in-progress: true
+
 env:
   IMAGE_REPO: ${{ secrets.DOCKERHUB_USERNAME }}/calendergpt
   APP_VERSION: v1.${{ github.run_number }}   # תגית בלתי-משתנה לכל ריצה
@@ -41,17 +45,15 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # דוחפים גם תגית גרסה ייחודית (v1.X) וגם latest
-      - name: Build & Push (immutable + latest)
+      # דוחפים רק תגית גרסה ייחודית (ללא latest)
+      - name: Build & Push (versioned only)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
           platforms: linux/amd64
-          tags: |
-            ${{ env.IMAGE_REPO }}:${{ env.APP_VERSION }}
-            ${{ env.IMAGE_REPO }}:latest
+          tags: ${{ env.IMAGE_REPO }}:${{ env.APP_VERSION }}
 
   deploy:
     name: Deploy to EC2
