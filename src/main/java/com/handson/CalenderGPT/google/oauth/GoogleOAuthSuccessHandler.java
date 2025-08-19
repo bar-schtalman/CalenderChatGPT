@@ -59,7 +59,7 @@ public void onAuthenticationSuccess(HttpServletRequest request, HttpServletRespo
     String frontendUrl = "https://calendargpt.org/app/index.html";
 
     // הפניה ישירה ל-frontend עם הטוקן
-response.sendRedirect("https://calendargpt.org/app/index.html?token=" + jwt);
+response.sendRedirect("https://calendargpt.org/app/index.html?token=" + jwtToken);
 }
 
 }
