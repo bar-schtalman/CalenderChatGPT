@@ -67,7 +67,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            set -euo pipefail
+            set -Eeuo pipefail
             set -x
 
             WORKDIR="${{ secrets.EC2_COMPOSE_DIR }}"
@@ -75,7 +75,7 @@ jobs:
 
             test -f docker-compose.yml || { echo "ERROR: docker-compose.yml not found in $PWD"; exit 1; }
 
-            # נזין את המשתנים לקומפוז דרך .env (אין override ואין sed)
+            # מייצרים .env עבור docker compose
             cat > .env <<EOF
             IMAGE_REPO=${{ env.IMAGE_REPO }}
             APP_VERSION=${{ env.APP_VERSION }}
@@ -83,6 +83,10 @@ jobs:
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
             EOF
+
+            # וגם מייצאים לסשן כדי שה-echo/לוגים לא יפלו עם set -u
+            export IMAGE_REPO="${{ env.IMAGE_REPO }}"
+            export APP_VERSION="${{ env.APP_VERSION }}"
 
             echo "==> כתיבת מפתחות JWT ל- /opt/calendargpt/keys"
             sudo install -d -m 700 /opt/calendargpt/keys
@@ -104,6 +108,7 @@ jobs:
             docker compose down --remove-orphans
 
             echo "==> PULL לפי ה-.env (יביא את ${IMAGE_REPO}:${APP_VERSION})"
+            # compose יטען אוטומטית את .env מהתיקיה הנוכחית
             docker compose pull
 
             echo "==> UP (עם healthcheck ל-Postgres, אפשר --wait)"
