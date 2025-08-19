@@ -61,6 +61,8 @@ public class SecurityConfig {
 
                 // נתיבים ציבוריים (פתוחים):
                 .requestMatchers(
+                    "/api/oauth2/authorization/**",
+                    "/api/login/oauth2/**",
                     "/api/auth/**",
                     "/oauth2/**",
                     "/login/oauth2/**",
@@ -75,8 +77,10 @@ public class SecurityConfig {
             )
 
             // OAuth2 Login (אם בשימוש; אפשר להשאיר מינימלי)
-            .oauth2Login(oauth2 -> oauth2
-                .successHandler(googleOAuthSuccessHandler)
+.oauth2Login(oauth2 -> oauth2
+    .authorizationEndpoint(ae -> ae.baseUri("/api/oauth2/authorization"))
+    .redirectionEndpoint(re -> re.baseUri("/api/login/oauth2/code/*"))
+    .successHandler(googleOAuthSuccessHandler)
             );
 
         // JWT לפני UsernamePasswordAuthenticationFilter
@@ -107,6 +111,8 @@ public class SecurityConfig {
         src.registerCorsConfiguration("/actuator/**", c);
         src.registerCorsConfiguration("/api/swagger-ui/**", c);
         src.registerCorsConfiguration("/api/v3/api-docs/**", c);
+        src.registerCorsConfiguration("/api/oauth2/**", c);
+        src.registerCorsConfiguration("/api/login/oauth2/**", c);
         return src;
     }
 
