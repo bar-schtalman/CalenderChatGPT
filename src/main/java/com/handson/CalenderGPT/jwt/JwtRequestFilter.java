@@ -37,7 +37,9 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             // (אופציונלי, לשימור הכתובות ההיסטוריות)
             || p.equals("/swagger-ui.html")
             || p.startsWith("/swagger-ui/")
-            || p.startsWith("/v3/api-docs");
+            || p.startsWith("/v3/api-docs")
+            || p.startsWith("/api/oauth2/authorization")
+            || p.startsWith("/api/login/oauth2/");
     }
 
     @Override
