@@ -66,7 +66,7 @@ public class CalendarController {
     }
 
     @DeleteMapping("/{calendarId}")
-    public ResponseEntity<String> deleteCalendar(@PathVariable String calendarId) {
+    public ResponseEntity<String> deleteCalendar1(@PathVariable String calendarId) {
         try {
             googleCalendarService.deleteCalendar(calendarId);
             return ResponseEntity.ok("Calendar with ID " + calendarId + " deleted successfully.");
