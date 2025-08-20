@@ -5,6 +5,7 @@ import com.handson.CalenderGPT.google.calendar.GoogleCalendarProvider;
 import com.handson.CalenderGPT.jwt.JwtTokenUtil;
 import com.handson.CalenderGPT.model.User;
 import com.handson.CalenderGPT.repository.UserRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -19,6 +20,8 @@ public class UserService {
     private final UserRepository repo;
     private final GoogleCalendarProvider calendarProvider;
     private final JwtTokenUtil jwtUtil;
+
+    @Transactional
 
     public User handleOAuthLogin(OAuth2AuthenticationToken oauthToken, OAuth2AuthorizedClient client) {
         // 1. Extract attributes
@@ -49,7 +52,9 @@ public class UserService {
         if (calId != null) user.setDefaultCalendarId(calId);
 
         // 5. Save & return
-        return repo.save(user);
+        User saved = repo.save(user);
+        log.info("💾 User {} saved with id={}", saved.getEmail(), saved.getId());
+        return saved;
     }
 
     private String fetchPrimaryCalendarId(OAuth2AuthorizedClient client) {
