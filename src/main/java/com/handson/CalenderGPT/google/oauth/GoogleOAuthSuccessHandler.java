@@ -54,7 +54,7 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
 
         String jwtToken = userService.createJwtFor(user);
 
-        String redirectUrl = "https://calendargpt.org/app/index.html"; // fallback
+        String redirectUrl = "https://calendargpt.org/index.html"; // fallback
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {
             for (Cookie c : cookies) {
