@@ -54,7 +54,7 @@ public class UserService {
 
         // 5. Save & return
         User saved = repo.save(user);
-        System.out.println("💾 User "+saved.getEmail()+" saved with id=" +saved.getId());
+        System.out.println("💾 User "+saved.getEmail()+" saved with id=" +saved.getId()+" saved at "+saved.getJwtIssuedAt());
         return saved;
     }
 
