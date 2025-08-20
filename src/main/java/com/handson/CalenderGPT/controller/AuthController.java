@@ -45,13 +45,21 @@ public class AuthController {
 
 
     @GetMapping("/auth/status")
-    public ResponseEntity<String> getAuthStatus(OAuth2AuthenticationToken auth) {
-        if (auth != null) {
-            return ResponseEntity.ok("✅ Logged in as " + auth.getPrincipal().getAttribute("email"));
+    public ResponseEntity<String> getAuthStatus(Authentication authentication) {
+        if (authentication != null && authentication.isAuthenticated()) {
+            Object principal = authentication.getPrincipal();
+            String email;
+            if (principal instanceof User user) {
+                email = user.getEmail();
+            } else {
+                email = principal.toString(); // fallback אם שמים רק username
+            }
+            return ResponseEntity.ok("✅ Logged in as " + email);
         } else {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("❌ Not logged in");
         }
     }
+
 
     @GetMapping("/api/me")
     public ResponseEntity<Map<String, Object>> getCurrentUser(Authentication authentication) {
