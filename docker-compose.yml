@@ -9,9 +9,9 @@ services:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/calendar_gpt
+      SPRING_DATASOURCE_URL: jdbc:postgresql://node128.codingbc.com:7878/bars_project
       SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_DATASOURCE_PASSWORD: Nov2017890#
       JWT_PRIVATE_KEY_PATH: file:/keys/private_key.pem
       JWT_PUBLIC_KEY_PATH: file:/keys/public_key.pem
       OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -20,7 +20,7 @@ services:
     depends_on:
       - postgres
     volumes:
-      - /opt/calendargpt/keys:/keys:ro
+      - /opt/bars_project/keys:/keys:ro
 
   postgres:
     image: postgres:15
