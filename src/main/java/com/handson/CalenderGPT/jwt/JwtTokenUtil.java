@@ -78,10 +78,16 @@ public class JwtTokenUtil {
     }
 
     public Jws<Claims> validateToken(String token) throws JwtException {
-        return Jwts.parserBuilder()
-                .setSigningKey(publicKey)
-                .build()
-                .parseClaimsJws(token);
+try {
+   return Jwts.parserBuilder()
+       .setSigningKey(publicKey)
+       .build()
+       .parseClaimsJws(token);
+} catch (JwtException e) {
+   System.err.println("❌ JWT validation failed: " + e.getMessage());
+   throw e;
+}
+
     }
 
     public String generateToken(UUID userId, String email, String fullName) {
