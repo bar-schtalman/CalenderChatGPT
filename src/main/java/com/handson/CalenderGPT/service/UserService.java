@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.Map;
 
-import static com.handson.CalenderGPT.controller.ChatController.log;
 
 @Service
 @RequiredArgsConstructor
