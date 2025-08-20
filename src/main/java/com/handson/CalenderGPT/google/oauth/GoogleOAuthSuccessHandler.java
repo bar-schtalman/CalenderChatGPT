@@ -39,20 +39,32 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         }
 
         OAuth2AuthorizedClient client = clientService.loadAuthorizedClient(
-                oauthToken.getAuthorizedClientRegistrationId(),
-                oauthToken.getName()
-        );
-        if (client == null || client.getAccessToken() == null) {
-            response.sendError(SC_UNAUTHORIZED, "Missing authorized client");
-            return;
-        }
+        oauthToken.getAuthorizedClientRegistrationId(),
+        oauthToken.getName()
+);
+if (client == null || client.getAccessToken() == null) {
+    response.sendError(SC_UNAUTHORIZED, "Missing authorized client");
+    return;
+}
 
-        log.info("✅ Google OAuth2 login successful for {}", oauthToken.getName());
+log.info("✅ Google OAuth2 login successful for {}", oauthToken.getName());
 
-        User user = userService.handleOAuthLogin(oauthToken, client);
-        calendarContext.setAuthorizedClient(client);
+User user = userService.handleOAuthLogin(oauthToken, client);
+calendarContext.setAuthorizedClient(client);
 
-        String jwtToken = userService.createJwtFor(user);
+// NEW: שמירת refresh_token אם קיים
+if (client.getRefreshToken() != null) {
+    String refreshToken = client.getRefreshToken().getTokenValue();
+    log.info("🔑 Received Google refresh_token for {}: {}", user.getEmail(), refreshToken);
+
+    user.setGoogleRefreshToken(refreshToken);
+    userService.save(user); // או userRepository.save(user) אם אין לך save ב־UserService
+} else {
+    log.warn("⚠ No Google refresh_token received for {}", user.getEmail());
+}
+
+String jwtToken = userService.createJwtFor(user);
+
 
         String redirectUrl = "https://calendargpt.org/index.html"; // fallback
         Cookie[] cookies = request.getCookies();
