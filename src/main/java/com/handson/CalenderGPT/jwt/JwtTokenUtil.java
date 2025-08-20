@@ -85,7 +85,6 @@ try {
        .parseClaimsJws(token);
 } catch (JwtException e) {
    System.err.println("❌ JWT validation failed: " + e.getMessage());
-    console.log("log ❌ JWT validation failed: " + e.getMessage());
    throw e;
 }
 
