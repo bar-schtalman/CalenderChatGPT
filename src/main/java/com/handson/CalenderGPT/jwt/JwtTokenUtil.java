@@ -45,6 +45,9 @@ public class JwtTokenUtil {
     private PrivateKey privateKey;
     private PublicKey publicKey;
 
+    @Autowired
+    private UserRepository userRepository;
+
     @PostConstruct
     public void loadKeys() throws Exception {
         log.info(">>> jwt.privateKeyPath = {}", privateKeyPath);
@@ -68,50 +71,52 @@ public class JwtTokenUtil {
         this.publicKey = kf.generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(publicPem)));
     }
 
-@Autowired
-private UserRepository userRepository;
+    /**
+     * בונה Authentication מתוך ה־JWT
+     */
+    public UsernamePasswordAuthenticationToken buildAuthentication(String jwt) {
+        Claims claims = validateToken(jwt).getBody();
 
-public UsernamePasswordAuthenticationToken buildAuthentication(String jwt) {
-    Claims claims = validateToken(jwt).getBody();
+        // subject = email (לא id)
+        String email = claims.getSubject();
+        List<String> roles = claims.get("roles", List.class);
 
-    // subject = email (לא id!)
-    String email = claims.getSubject();
-    List<String> roles = claims.get("roles", List.class);
+        // חיפוש היוזר מה־DB לפי אימייל
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
 
-    // חיפוש היוזר מה־DB לפי אימייל
-    User user = userRepository.findByEmail(email)
-            .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
+        List<GrantedAuthority> authorities = (roles == null)
+                ? List.of()
+                : roles.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList());
 
-    List<GrantedAuthority> authorities = (roles == null)
-            ? List.of()
-            : roles.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList());
-
-    // תחזיר Authentication עם ה־User המלא
-    return new UsernamePasswordAuthenticationToken(user, null, authorities);
-}
-
-
-
-    public Jws<Claims> validateToken(String token) throws JwtException {
-try {
-   return Jwts.parserBuilder()
-       .setSigningKey(publicKey)
-       .build()
-       .parseClaimsJws(token);
-} catch (JwtException e) {
-   System.err.println("❌ JWT validation failed: " + e.getMessage());
-   throw e;
-}
-
+        return new UsernamePasswordAuthenticationToken(user, null, authorities);
     }
 
+    /**
+     * ולידציה לטוקן
+     */
+    public Jws<Claims> validateToken(String token) throws JwtException {
+        try {
+            return Jwts.parserBuilder()
+                    .setSigningKey(publicKey)
+                    .build()
+                    .parseClaimsJws(token);
+        } catch (JwtException e) {
+            System.err.println("❌ JWT validation failed: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * יצירת טוקן חדש
+     */
     public String generateToken(UUID userId, String email, String fullName) {
         Instant now = Instant.now();
         Instant exp = now.plusSeconds(expirationMinutes * 60);
 
         return Jwts.builder()
-                .setSubject(user.getEmail())
-                .claim("email", email)
+                .setSubject(email)  // 👈 email הוא ה־subject
+                .claim("userId", userId.toString())
                 .claim("name", fullName)
                 .setIssuedAt(Date.from(now))
                 .setExpiration(Date.from(exp))
@@ -120,12 +125,16 @@ try {
                 .compact();
     }
 
+    /**
+     * עוזרים לשליפה מתוך טוקן
+     */
     public UUID getUserIdFromToken(String token) {
-        return UUID.fromString(validateToken(token).getBody().getSubject());
+        String userIdStr = validateToken(token).getBody().get("userId", String.class);
+        return (userIdStr != null) ? UUID.fromString(userIdStr) : null;
     }
 
     public String getEmail(String token) {
-        return validateToken(token).getBody().get("email", String.class);
+        return validateToken(token).getBody().getSubject();
     }
 
     public String getName(String token) {
