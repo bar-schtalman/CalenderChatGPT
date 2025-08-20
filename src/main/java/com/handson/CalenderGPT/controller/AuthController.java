@@ -1,6 +1,7 @@
 package com.handson.CalenderGPT.controller;
 
 import com.handson.CalenderGPT.model.User;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpHeaders;
@@ -10,13 +11,38 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
 @RestController
 public class AuthController {
+
+    @GetMapping("/api/auth/google/login")
+    public void handleGoogleLogin(@RequestParam("next") String next, HttpServletResponse response) throws IOException {
+        String encoded = URLEncoder.encode(next, StandardCharsets.UTF_8);
+
+        // בונים עוגייה עם SameSite=Lax + Secure + HttpOnly
+        ResponseCookie cookie = ResponseCookie.from("POST_LOGIN_NEXT", encoded)
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(Duration.ofMinutes(2))
+                .sameSite("Lax")
+                .build();
+        response.addHeader("Set-Cookie", cookie.toString());
+
+        // מפנה להפעלת OAuth2 של ספרינג
+        response.sendRedirect("/api/oauth2/authorization/google");
+    }
+
+
 
     @GetMapping("/auth/status")
     public ResponseEntity<String> getAuthStatus(OAuth2AuthenticationToken auth) {

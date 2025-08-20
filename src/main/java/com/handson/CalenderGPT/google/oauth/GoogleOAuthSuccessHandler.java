@@ -16,6 +16,8 @@ import org.springframework.security.web.authentication.AuthenticationSuccessHand
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 import static jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED;
 
@@ -28,38 +30,53 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
     private final UserService userService;
     private final CalendarContext calendarContext;
 
-   @Override
-public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException {
+    @Override
+    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException {
 
-    if (!(authentication instanceof OAuth2AuthenticationToken oauthToken)) {
-        response.sendError(SC_UNAUTHORIZED, "Authentication failed");
-        return;
+        if (!(authentication instanceof OAuth2AuthenticationToken oauthToken)) {
+            response.sendError(SC_UNAUTHORIZED, "Authentication failed");
+            return;
+        }
+
+        OAuth2AuthorizedClient client = clientService.loadAuthorizedClient(
+                oauthToken.getAuthorizedClientRegistrationId(),
+                oauthToken.getName()
+        );
+        if (client == null || client.getAccessToken() == null) {
+            response.sendError(SC_UNAUTHORIZED, "Missing authorized client");
+            return;
+        }
+
+        log.info("✅ Google OAuth2 login successful for {}", oauthToken.getName());
+
+        User user = userService.handleOAuthLogin(oauthToken, client);
+        calendarContext.setAuthorizedClient(client);
+
+        String jwtToken = userService.createJwtFor(user);
+
+        String redirectUrl = "https://calendargpt.org/app/index.html"; // fallback
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie c : cookies) {
+                if ("POST_LOGIN_NEXT".equals(c.getName())) {
+                    try {
+                        redirectUrl = URLDecoder.decode(c.getValue(), StandardCharsets.UTF_8);
+                    } catch (Exception e) {
+                        redirectUrl = c.getValue();
+                    }
+                }
+            }
+        }
+
+        // מחיקת העוגייה
+        Cookie removeCookie = new Cookie("POST_LOGIN_NEXT", "");
+        removeCookie.setPath("/");
+        removeCookie.setMaxAge(0);
+        response.addCookie(removeCookie);
+
+        redirectUrl += (redirectUrl.contains("?") ? "&" : "?") + "token=" + jwtToken;
+        response.sendRedirect(redirectUrl);
     }
 
-    OAuth2AuthorizedClient client = clientService.loadAuthorizedClient(
-            oauthToken.getAuthorizedClientRegistrationId(),
-            oauthToken.getName()
-    );
-
-    if (client == null || client.getAccessToken() == null) {
-        response.sendError(SC_UNAUTHORIZED, "Missing authorized client");
-        return;
-    }
-
-    log.info("✅ Google OAuth2 login successful for {}", oauthToken.getName());
-
-    // Handle user login/upsert logic
-    User user = userService.handleOAuthLogin(oauthToken, client);
-    calendarContext.setAuthorizedClient(client);
-
-    // Generate new JWT for this user
-    String jwtToken = userService.createJwtFor(user);
-
-    // כתובת ה-frontend ב-CloudFront
-    String frontendUrl = "https://calendargpt.org/app/index.html";
-
-    // הפניה ישירה ל-frontend עם הטוקן
-response.sendRedirect("https://calendargpt.org/app/index.html?token=" + jwtToken);
-}
 
 }
