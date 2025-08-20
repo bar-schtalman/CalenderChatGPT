@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.Map;
 
+import static com.handson.CalenderGPT.controller.ChatController.log;
+
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -53,7 +55,7 @@ public class UserService {
 
         // 5. Save & return
         User saved = repo.save(user);
-        log.info("💾 User {} saved with id={}", saved.getEmail(), saved.getId());
+        System.out.println("💾 User "+saved.getEmail()+" saved with id=" +saved.getId());
         return saved;
     }
 
