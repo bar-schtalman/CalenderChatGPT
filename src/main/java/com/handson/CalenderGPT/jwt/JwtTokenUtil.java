@@ -64,18 +64,26 @@ public class JwtTokenUtil {
         this.publicKey = kf.generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(publicPem)));
     }
 
-    public UsernamePasswordAuthenticationToken buildAuthentication(String jwt) {
-        Claims claims = validateToken(jwt).getBody();
+@Autowired
+private UserRepository userRepository;
 
-        String username = claims.getSubject();
-        List<String> roles = claims.get("roles", List.class);
+public UsernamePasswordAuthenticationToken buildAuthentication(String jwt) {
+    Claims claims = validateToken(jwt).getBody();
 
-        List<GrantedAuthority> authorities = (roles == null)
-                ? List.of()
-                : roles.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList());
+    String subject = claims.getSubject(); // email או id
+    List<String> roles = claims.get("roles", List.class);
 
-        return new UsernamePasswordAuthenticationToken(username, null, authorities);
-    }
+    // חיפוש היוזר מה־DB
+    User user = userRepository.findByEmail(subject)
+            .orElseThrow(() -> new UsernameNotFoundException("User not found: " + subject));
+
+    List<GrantedAuthority> authorities = (roles == null)
+            ? List.of()
+            : roles.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList());
+
+    return new UsernamePasswordAuthenticationToken(user, null, authorities);
+}
+
 
     public Jws<Claims> validateToken(String token) throws JwtException {
 try {
