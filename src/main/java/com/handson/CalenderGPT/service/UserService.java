@@ -53,7 +53,8 @@ public class UserService {
         if (calId != null) user.setDefaultCalendarId(calId);
 
         // 5. Save & return
-        User saved = repo.save(user);
+        User saved = repo.saveAndFlush(user);
+
         System.out.println("💾 User "+saved.getEmail()+" saved with id=" +saved.getId()+" saved at "+saved.getJwtIssuedAt());
         return saved;
     }
