@@ -39,7 +39,7 @@ public class AuthController {
         response.addHeader("Set-Cookie", cookie.toString());
 
         // מפנה להפעלת OAuth2 של ספרינג
-        response.sendRedirect("/api/oauth2/authorization/google");
+    response.sendRedirect("https://ec2-stage.calendargpt.org/api/oauth2/authorization/google");
     }
 
 
