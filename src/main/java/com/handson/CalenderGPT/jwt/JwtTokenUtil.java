@@ -107,7 +107,7 @@ try {
         Instant exp = now.plusSeconds(expirationMinutes * 60);
 
         return Jwts.builder()
-                .setSubject(userId.toString())
+                .setSubject(user.getEmail())
                 .claim("email", email)
                 .claim("name", fullName)
                 .setIssuedAt(Date.from(now))
