@@ -74,19 +74,22 @@ private UserRepository userRepository;
 public UsernamePasswordAuthenticationToken buildAuthentication(String jwt) {
     Claims claims = validateToken(jwt).getBody();
 
-    String subject = claims.getSubject(); // email או id
+    // subject = email (לא id!)
+    String email = claims.getSubject();
     List<String> roles = claims.get("roles", List.class);
 
-    // חיפוש היוזר מה־DB
-    User user = userRepository.findByEmail(subject)
-            .orElseThrow(() -> new UsernameNotFoundException("User not found: " + subject));
+    // חיפוש היוזר מה־DB לפי אימייל
+    User user = userRepository.findByEmail(email)
+            .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
 
     List<GrantedAuthority> authorities = (roles == null)
             ? List.of()
             : roles.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList());
 
+    // תחזיר Authentication עם ה־User המלא
     return new UsernamePasswordAuthenticationToken(user, null, authorities);
 }
+
 
 
     public Jws<Claims> validateToken(String token) throws JwtException {
