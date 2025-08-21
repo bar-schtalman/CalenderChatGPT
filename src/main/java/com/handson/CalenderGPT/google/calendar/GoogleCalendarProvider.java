@@ -7,7 +7,6 @@ import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.calendar.Calendar;
 import com.handson.CalenderGPT.model.User;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -17,6 +16,17 @@ import java.security.GeneralSecurityException;
 public class GoogleCalendarProvider {
 
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
+    private static final String APPLICATION_NAME = "CalendarGPT";
+
+    private static final com.google.api.client.http.HttpTransport HTTP_TRANSPORT;
+
+    static {
+        try {
+            HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
+        } catch (GeneralSecurityException | IOException e) {
+            throw new ExceptionInInitializerError("Failed to initialize HTTP_TRANSPORT: " + e.getMessage());
+        }
+    }
 
     @Value("${spring.security.oauth2.client.registration.google.client-id}")
     private String clientId;
@@ -24,29 +34,27 @@ public class GoogleCalendarProvider {
     @Value("${spring.security.oauth2.client.registration.google.client-secret}")
     private String clientSecret;
 
-
-    public Calendar getCalendarClient(OAuth2AuthorizedClient client) throws GeneralSecurityException, IOException {
-        if (client == null || client.getAccessToken() == null) {
-            throw new IllegalStateException("OAuth2AuthorizedClient or access token is missing.");
+    /**
+     * Build Calendar client using refresh token from User (JWT stateless flow).
+     */
+    public Calendar getCalendarClient(User user) throws IOException {
+        if (user == null || user.getGoogleRefreshToken() == null || user.getGoogleRefreshToken().isBlank()) {
+            throw new IllegalStateException("Missing Google refresh token for user");
         }
 
-        return new Calendar.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, request -> request.getHeaders().setAuthorization("Bearer " + client.getAccessToken().getTokenValue())).setApplicationName("CalendarGPT").build();
-    }
+        GoogleCredential credential = new GoogleCredential.Builder()
+                .setTransport(HTTP_TRANSPORT)
+                .setJsonFactory(JSON_FACTORY)
+                .setClientSecrets(clientId, clientSecret)
+                .build()
+                .setRefreshToken(user.getGoogleRefreshToken());
 
-    public Calendar getCalendarClient(User user) throws GeneralSecurityException, IOException {
-        if (user.getGoogleRefreshToken() == null || user.getGoogleRefreshToken().isBlank()) {
-            throw new IllegalStateException("Missing Google refresh token for user: " + user.getEmail());
+        if (!credential.refreshToken()) {
+            throw new IllegalStateException("Failed to refresh Google credentials for user: " + user.getEmail());
         }
 
-        GoogleCredential credential = new GoogleCredential.Builder().setTransport(GoogleNetHttpTransport.newTrustedTransport()).setJsonFactory(JSON_FACTORY).setClientSecrets(clientId, clientSecret).build().setRefreshToken(user.getGoogleRefreshToken());
-
-        // Refresh the token if necessary
-        try {
-            credential.refreshToken();
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to refresh Google credentials for user: " + user.getEmail(), e);
-        }
-
-        return new Calendar.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, credential).setApplicationName("CalendarGPT").build();
+        return new Calendar.Builder(HTTP_TRANSPORT, JSON_FACTORY, credential)
+                .setApplicationName(APPLICATION_NAME)
+                .build();
     }
 }
