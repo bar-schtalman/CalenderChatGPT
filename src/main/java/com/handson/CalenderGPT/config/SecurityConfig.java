@@ -100,6 +100,8 @@ public class SecurityConfig {
         src.registerCorsConfiguration("/api/v3/api-docs/**", c);
         src.registerCorsConfiguration("/api/oauth2/**", c);
         src.registerCorsConfiguration("/api/login/oauth2/**", c);
+        src.registerCorsConfiguration("/chat/**", c);
+
         return src;
     }
 
