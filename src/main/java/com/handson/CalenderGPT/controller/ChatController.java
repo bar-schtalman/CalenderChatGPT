@@ -2,6 +2,7 @@ package com.handson.CalenderGPT.controller;
 
 import com.handson.CalenderGPT.context.CalendarContext;
 import com.handson.CalenderGPT.model.User;
+import com.handson.CalenderGPT.security.AuthenticatedUserResolver;
 import com.handson.CalenderGPT.service.ConversationService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -17,11 +18,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/chat")
+@RequestMapping("/api/chat")
 public class ChatController {
 
     private final ConversationService conversationService;
     private final CalendarContext calendarContext;
+    private final AuthenticatedUserResolver userResolver; // <-- שימוש ברזולבר
 
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
 
