@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.Map;
 
-
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -23,7 +22,6 @@ public class UserService {
     private final JwtTokenUtil jwtUtil;
 
     @Transactional
-
     public User handleOAuthLogin(OAuth2AuthenticationToken oauthToken, OAuth2AuthorizedClient client) {
         // 1. Extract attributes
         Map<String, Object> attrs = oauthToken.getPrincipal().getAttributes();
@@ -32,7 +30,7 @@ public class UserService {
         String first = (String) attrs.getOrDefault("given_name", fullName);
         String last = (String) attrs.getOrDefault("family_name", "");
 
-        // 2. Find or create
+        // 2. Find or create user
         User user = repo.findByEmail(email).orElseGet(() -> {
             User u = new User();
             u.setEmail(email);
@@ -43,32 +41,35 @@ public class UserService {
         });
         user.setJwtIssuedAt(Instant.now());
 
-        // 3. Store refresh token
+        // 3. Store refresh token (if exists)
         if (client.getRefreshToken() != null) {
             user.setGoogleRefreshToken(client.getRefreshToken().getTokenValue());
         }
 
-        // 4. Fetch primary calendar ID
-        String calId = fetchPrimaryCalendarId(client);
-        if (calId != null) user.setDefaultCalendarId(calId);
+        // 4. Fetch primary calendar ID using User + GoogleCalendarProvider
+        String calId = fetchPrimaryCalendarId(user);
+        if (calId != null) {
+            user.setDefaultCalendarId(calId);
+        }
 
         // 5. Save & return
         User saved = repo.saveAndFlush(user);
 
-        System.out.println("💾 User "+saved.getEmail()+" saved with id=" +saved.getId()+" saved at "+saved.getJwtIssuedAt());
+        System.out.println("💾 User " + saved.getEmail() + " saved with id=" + saved.getId() +
+                " saved at " + saved.getJwtIssuedAt());
         return saved;
     }
 
-    private String fetchPrimaryCalendarId(OAuth2AuthorizedClient client) {
+    private String fetchPrimaryCalendarId(User user) {
         try {
-            Calendar calSvc = calendarProvider.getCalendarClient(client);
+            Calendar calSvc = calendarProvider.getCalendarClient(user);
             for (var entry : calSvc.calendarList().list().execute().getItems()) {
                 if (Boolean.TRUE.equals(entry.getPrimary())) {
                     return entry.getId();
                 }
             }
         } catch (Exception e) {
-            //log.warn("Failed to fetch default calendar", e);
+            // log.warn("Failed to fetch default calendar", e);
         }
         return null;
     }
