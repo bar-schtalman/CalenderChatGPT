@@ -20,6 +20,8 @@ public class IntentService {
 
     private final String today;
     private final String tomorrow;
+    private final String thisWeekStart;
+    private final String thisWeekEnd;
     private final String nextWeek;
 
     public IntentService(ChatGPTService chatGPTService) {
@@ -28,14 +30,23 @@ public class IntentService {
         LocalDate todayDate = LocalDate.now();
         this.today = todayDate.format(DateTimeFormatter.ISO_DATE);
         this.tomorrow = todayDate.plusDays(1).format(DateTimeFormatter.ISO_DATE);
+
+        // This week: today until coming Saturday
+        LocalDate thisWeekEndDate = todayDate.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
+        this.thisWeekStart = todayDate.format(DateTimeFormatter.ISO_DATE);
+        this.thisWeekEnd = thisWeekEndDate.format(DateTimeFormatter.ISO_DATE);
+
+        // Next week: Sunday until Saturday
         this.nextWeek = todayDate.with(TemporalAdjusters.next(DayOfWeek.SUNDAY))
-                     .plusDays(6)
-                     .format(DateTimeFormatter.ISO_DATE);
+                                 .plusDays(6)
+                                 .format(DateTimeFormatter.ISO_DATE);
     }
 
     public String extractDetailsFromPrompt(String prompt) {
         LocalDate today = LocalDate.now();
         LocalDate tomorrow = today.plusDays(1);
+        LocalDate thisWeekStart = today;
+        LocalDate thisWeekEnd = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
         LocalDate nextWeek = today.with(TemporalAdjusters.next(DayOfWeek.SUNDAY))
                                   .plusDays(6);
 
@@ -45,17 +56,16 @@ public class IntentService {
               + "\"intent\" (CREATE, EDIT, DELETE, VIEW), "
               + "\"summary\", \"description\", \"start\", \"end\", \"location\". "
 
-              // Format enforcement
               + "Ensure both \"start\" and \"end\" are in full ISO 8601 format with milliseconds and Z (e.g., 2025-04-09T15:00:00.000Z). "
 
-              // ⚠️ Main Rule
               + "IMPORTANT: For ALL intents, if \"start\" is provided but \"end\" is missing, set \"end\" to 1 hour after \"start\". "
               + "If \"start\" is not provided at all, leave both \"start\" and \"end\" as empty strings (\"\"). "
               + "Do NOT assume a full day or any default times based on the intent. "
 
-              // 🗓️ Natural date handling
-              + "Use these time references when interpreting phrases: today = " + today.format(DateTimeFormatter.ISO_DATE)
+              + "Use these time references when interpreting phrases: "
+              + "today = " + today.format(DateTimeFormatter.ISO_DATE)
               + ", tomorrow = " + tomorrow.format(DateTimeFormatter.ISO_DATE)
+              + ", this week = " + thisWeekStart.format(DateTimeFormatter.ISO_DATE) + " - " + thisWeekEnd.format(DateTimeFormatter.ISO_DATE)
               + ", next week = " + nextWeek.format(DateTimeFormatter.ISO_DATE) + ". "
               + "If a date does not include a year, use the current year if the date is still upcoming, otherwise use the next year. "
               + "If a date includes a past year, adjust it to the next valid future occurrence by adding one year. "
@@ -70,10 +80,8 @@ public class IntentService {
               + "        Text: \"Tell me a joke\"  \n"
               + "        → {\"intent\":\"NONE\",\"message\":\"Sure, here's one...\"}  "
 
-              // 🧠 Not an event? Return NONE
               + "If the request is not related to an event (e.g., a song, story, poem), return {\"intent\": \"NONE\", \"message\": \"response text\"}. "
 
-              // ✅ Output
               + "Respond only with raw JSON — no markdown, no extra text, and no formatting. "
               + "Text: \"" + prompt + "\"";
 
