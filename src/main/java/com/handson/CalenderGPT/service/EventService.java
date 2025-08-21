@@ -1,4 +1,5 @@
 package com.handson.CalenderGPT.service;
+import java.time.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.client.util.DateTime;
@@ -18,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -33,6 +36,31 @@ public class EventService {
 
     // עדיף לקבל ObjectMapper כ-bean מנוהל (thread-safe בשימוש ברירת מחדל)
     private final ObjectMapper objectMapper;
+
+
+    private static final String DEFAULT_TZ = "Asia/Jerusalem";
+
+    private static String tzOrDefault(String tz) {
+        return (tz == null || tz.isBlank()) ? DEFAULT_TZ : tz;
+    }
+
+    /**
+     * המרה מדויקת של LocalDateTime לאובייקט Google DateTime לפי אזור זמן נתון.
+     */
+    private static DateTime toGoogleStrict(LocalDateTime ldt, String tz) {
+        ZoneId zone = ZoneId.of(tzOrDefault(tz));
+        ZonedDateTime zdt = ldt.atZone(zone);
+        // DateTime: epochMillis + offsetMinutes
+        return new DateTime(zdt.toInstant().toEpochMilli(), zdt.getOffset().getTotalSeconds() / 60);
+    }
+
+    /**
+     * המרת Google DateTime בחזרה ל-LocalDateTime באזור זמן נתון להצגה (כרטיס אירוע).
+     */
+    private static LocalDateTime fromGoogleInZone(DateTime dt, String tz) {
+        ZoneId zone = ZoneId.of(tzOrDefault(tz));
+        return Instant.ofEpochMilli(dt.getValue()).atZone(zone).toLocalDateTime();
+    }
 
     private static String effectiveCalendarId(String calendarId) {
         return (calendarId == null || calendarId.isBlank()) ? "primary" : calendarId;
@@ -86,12 +114,15 @@ public class EventService {
         existingEvent.setDescription(eventRequest.getDescription());
 
         // זמן + אזור זמן (שומרים TZ גם ב-start וגם ב-end)
+// זמן + אזור זמן (שומרים TZ גם ב-start וגם ב-end)
+        String tz = tzOrDefault(eventRequest.getTimeZone());
         existingEvent.setStart(new EventDateTime()
-                .setDateTime(toGoogle(eventRequest.getStart(), eventRequest.getTimeZone()))
-                .setTimeZone(eventRequest.getTimeZone()));
+                .setDateTime(toGoogleStrict(eventRequest.getStart(), tz))
+                .setTimeZone(tz));
         existingEvent.setEnd(new EventDateTime()
-                .setDateTime(toGoogle(eventRequest.getEnd(), eventRequest.getTimeZone()))
-                .setTimeZone(eventRequest.getTimeZone()));
+                .setDateTime(toGoogleStrict(eventRequest.getEnd(), tz))
+                .setTimeZone(tz));
+
 
         // אורחים: אם הרשימה לא ריקה נעדכן; אם null נשאיר קיימים; אם רשימה ריקה—ננקה
         if (eventRequest.getGuests() != null) {
@@ -145,8 +176,9 @@ public class EventService {
                                                     Calendar googleCalendarClient) throws IOException {
 
         final String calId = effectiveCalendarId(calendarId);
-        DateTime startDateTime = toGoogle(eventRequest.getStart(), eventRequest.getTimeZone());
-        DateTime endDateTime   = toGoogle(eventRequest.getEnd(), eventRequest.getTimeZone());
+        String tz = tzOrDefault(eventRequest.getTimeZone());
+        DateTime startDateTime = toGoogleStrict(eventRequest.getStart(), tz);
+        DateTime endDateTime   = toGoogleStrict(eventRequest.getEnd(), tz);
 
         com.google.api.services.calendar.model.Event googleEvent =
                 new com.google.api.services.calendar.model.Event()
@@ -156,10 +188,11 @@ public class EventService {
 
         googleEvent.setStart(new EventDateTime()
                 .setDateTime(startDateTime)
-                .setTimeZone(eventRequest.getTimeZone()));
+                .setTimeZone(tz));
         googleEvent.setEnd(new EventDateTime()
                 .setDateTime(endDateTime)
-                .setTimeZone(eventRequest.getTimeZone()));
+                .setTimeZone(tz));
+
 
         if (eventRequest.getGuests() != null && !eventRequest.getGuests().isEmpty()) {
             List<EventAttendee> attendees = eventRequest.getGuests().stream()
@@ -191,6 +224,12 @@ public class EventService {
         EventDateTime startDt = event.getStart();
         EventDateTime endDt   = event.getEnd();
 
+// קח את ה-TZ מהאירוע אם נשלח (Google יחזיר אותו אם הגדרנו אותו ביצירה/עדכון)
+        String tz = DEFAULT_TZ;
+        if (startDt != null && startDt.getTimeZone() != null && !startDt.getTimeZone().isBlank()) {
+            tz = startDt.getTimeZone();
+        }
+
         DateTime startRaw = (startDt != null && startDt.getDateTime() != null)
                 ? startDt.getDateTime()
                 : (startDt != null ? startDt.getDate() : null);
@@ -199,8 +238,8 @@ public class EventService {
                 : (endDt != null ? endDt.getDate() : null);
 
         if (startRaw != null && endRaw != null) {
-            LocalDateTime startLdt = fromGoogle(startRaw);
-            LocalDateTime endLdt   = fromGoogle(endRaw);
+            LocalDateTime startLdt = fromGoogleInZone(startRaw, tz);
+            LocalDateTime endLdt   = fromGoogleInZone(endRaw, tz);
 
             map.put("date", startLdt.format(DateTimeFormatter.ofPattern("dd-MM-yyyy")));
             map.put("time",
@@ -325,17 +364,29 @@ public class EventService {
         final String calId = effectiveCalendarId(calendarId);
         Calendar googleCalendarClient = clientFor(user);
 
-        // חשוב: Google DateTime מצפה ל-RFC3339. דאג שה-startDate/endDate מגיעים בפורמט תקין (למשל "2025-08-21T00:00:00Z")
+// בחר TZ להצגה/חישוב (אפשר גם לשמור אצל המשתמש אם יש לך שדה עתידי)
+        ZoneId zone = ZoneId.of(DEFAULT_TZ);
+
+// הפרשנות: המחרוזות שמגיעות הן ימי-קצה (למשל "2025-08-21T00:00:00.000Z")
+// אבל אנחנו רוצים "היום" באזור הזמן המקומי (כדי לא לאבד אירועי 00:15/23:30)
+        Instant startInstant = Instant.parse(startDate); // לא קריטי, רק כדי להוציא LocalDate
+        LocalDate day = startInstant.atZone(zone).toLocalDate();
+
+        Instant min = day.atStartOfDay(zone).toInstant();
+        Instant max = day.plusDays(1).atStartOfDay(zone).minusNanos(1).toInstant();
+
         Events events = googleCalendarClient.events()
                 .list(calId)
-                .setTimeMin(new DateTime(startDate))
-                .setTimeMax(new DateTime(endDate))
+                .setTimeMin(new DateTime(min.toEpochMilli()))
+                .setTimeMax(new DateTime(max.toEpochMilli()))
                 .setOrderBy("startTime")
                 .setSingleEvents(true)
+                .setTimeZone(DEFAULT_TZ) // חשוב כדי שסטארט/אנד יגיעו לפי ה-TZ הזה
                 .setFields("items(id,summary,start,end,location,description,attendees)")
                 .execute();
 
         return events.getItems().stream().map(this::mapEvent).collect(Collectors.toList());
+
     }
 
     public Map<String, String> getEventById(String calendarId, String eventId, User user)
