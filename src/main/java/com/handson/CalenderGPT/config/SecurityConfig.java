@@ -74,10 +74,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    @Bean
-    public Filter forwardedHeaderFilter() {
-        return new ForwardedHeaderFilter();
-    }
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
