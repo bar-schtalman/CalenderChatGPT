@@ -26,13 +26,17 @@ public class IntentService {
         LocalDate todayDate = LocalDate.now();
         this.today = todayDate.format(DateTimeFormatter.ISO_DATE);
         this.tomorrow = todayDate.plusDays(1).format(DateTimeFormatter.ISO_DATE);
-        this.nextWeek = todayDate.plusWeeks(1).format(DateTimeFormatter.ISO_DATE);
+        this.nextWeek = today.with(TemporalAdjusters.next(DayOfWeek.SUNDAY))
+                     .plusDays(6)
+                     .format(DateTimeFormatter.ISO_DATE);
     }
 
     public String extractDetailsFromPrompt(String prompt) {
         LocalDate today = LocalDate.now();
         LocalDate tomorrow = today.plusDays(1);
-        LocalDate nextWeek = today.plusWeeks(1);
+        LocalDate nextWeek = today.with(TemporalAdjusters.next(DayOfWeek.SUNDAY))
+                     .plusDays(6)
+                     .format(DateTimeFormatter.ISO_DATE);
 
         String extractionPrompt = "Analyze the following text and determine if it represents an event-related request (Create, Edit, Delete, View). " + "If it is event-related, return a structured JSON object with the following fields: " + "\"intent\" (CREATE, EDIT, DELETE, VIEW), " + "\"summary\", \"description\", \"start\", \"end\", \"location\". " +
 
