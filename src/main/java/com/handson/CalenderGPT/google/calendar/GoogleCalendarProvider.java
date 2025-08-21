@@ -52,6 +52,7 @@ public class GoogleCalendarProvider {
         if (!credential.refreshToken()) {
             throw new IllegalStateException("Failed to refresh Google credentials for user: " + user.getEmail());
         }
+        System.out.println("Refreshed access token for " + user.getEmail() + ": " + credential.getAccessToken());
 
         return new Calendar.Builder(HTTP_TRANSPORT, JSON_FACTORY, credential)
                 .setApplicationName(APPLICATION_NAME)
