@@ -78,11 +78,8 @@ public class EventController {
     }
 
     private String getCalendarId() {
-        String calendarId = calendarContext.getCalendarId();
-        if (calendarId == null) {
-            throw new IllegalStateException("❌ Calendar ID not found in context.");
-        }
-        return calendarId;
+        String id = calendarContext.getCalendarId();
+        return (id == null || id.isBlank()) ?"primary" : id;
     }
 
     private User getAuthenticatedUser() {
