@@ -1,22 +1,27 @@
 package com.handson.CalenderGPT.config;
 
-import com.handson.CalenderGPT.google.oauth.GoogleOAuthSuccessHandler;
+
 import com.handson.CalenderGPT.jwt.JwtAuthenticationEntryPoint;
 import com.handson.CalenderGPT.jwt.JwtRequestFilter;
+import com.handson.CalenderGPT.google.oauth.GoogleOAuthSuccessHandler;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.filter.ForwardedHeaderFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.ForwardedHeaderFilter;
+
 
 import java.util.List;
 
@@ -42,24 +47,12 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // CORS
                 .cors(Customizer.withDefaults())
-
-                // CSRF כבוי: אנחנו סטייטלס עם JWT
                 .csrf(csrf -> csrf.disable())
-
-                // 401 במקום redirect
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
-
-                // סטייטלס
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-                // הרשאות
                 .authorizeHttpRequests(auth -> auth
-                        // לאפשר Preflight
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                        // נתיבים ציבוריים (פתוחים):
                         .requestMatchers(
                                 "/api/oauth2/authorization/**",
                                 "/api/login/oauth2/**",
@@ -71,19 +64,14 @@ public class SecurityConfig {
                                 "/api/health",
                                 "/actuator/health"
                         ).permitAll()
-
-                        // כל היתר דורש אימות
                         .anyRequest().authenticated()
                 )
-
-                // OAuth2 Login (אם בשימוש; אפשר להשאיר מינימלי)
                 .oauth2Login(oauth2 -> oauth2
                         .authorizationEndpoint(ae -> ae.baseUri("/api/oauth2/authorization"))
                         .redirectionEndpoint(re -> re.baseUri("/api/login/oauth2/code/*"))
                         .successHandler(googleOAuthSuccessHandler)
                 );
 
-        // JWT לפני UsernamePasswordAuthenticationFilter
         http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
@@ -92,7 +80,6 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration c = new CorsConfiguration();
-        // עדכן את הרשימה לפי הדומיינים שלך (כולל www)
         c.setAllowedOrigins(List.of(
                 "https://ec2-stage.calendargpt.org",
                 "https://calendargpt.org",
@@ -116,4 +103,9 @@ public class SecurityConfig {
         return src;
     }
 
+    // ⬅️ זה התוספת החדשה
+    @Bean
+    public ForwardedHeaderFilter forwardedHeaderFilter() {
+        return new ForwardedHeaderFilter();
+    }
 }
