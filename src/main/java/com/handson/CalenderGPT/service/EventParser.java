@@ -22,13 +22,12 @@ public class EventParser {
             event.setSummary(jsonNode.path("summary").asText("No Title"));
             event.setDescription(jsonNode.path("description").asText(""));
             event.setLocation(jsonNode.path("location").asText(""));
-
             String rawStart = jsonNode.path("start").asText("").replace("Z", "");
-            String rawEnd = jsonNode.path("end").asText("").replace("Z", "");
-
+            String rawEnd   = jsonNode.path("end").asText("").replace("Z", "");
             event.setStart(LocalDateTime.parse(rawStart, ISO_FORMATTER));
             event.setEnd(LocalDateTime.parse(rawEnd, ISO_FORMATTER));
-            event.setTimeZone(ZoneId.systemDefault().toString());
+            // ✅ קיבוע TZ לא"י—מונע סטיות בשמירה ל-Google
+            event.setTimeZone("Asia/Jerusalem");
 
             return event;
         } catch (Exception e) {
@@ -39,7 +38,7 @@ public class EventParser {
             fallback.setLocation("No Location");
             fallback.setStart(LocalDateTime.now());
             fallback.setEnd(LocalDateTime.now().plusHours(1));
-            fallback.setTimeZone(ZoneId.systemDefault().toString());
+            fallback.setTimeZone("Asia/Jerusalem");
             return fallback;
         }
     }

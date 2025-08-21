@@ -21,9 +21,18 @@ public class EventResponseBuilder {
 
     public String buildEventCardResponse(com.handson.CalenderGPT.model.Event event, Map<String, String> created) {
         try {
-            return new ObjectMapper().writeValueAsString(List.of(Map.of("role", "event", "summary", event.getSummary(), "date", event.getStart().toLocalDate().toString(), "time", event.getStart().toLocalTime().toString() + " - " + event.getEnd().toLocalTime().toString(), "calendarId", calendarContext.getCalendarId(), "id", created.getOrDefault("id", ""), "guests", created.getOrDefault("guests", ""), "location", event.getLocation() != null ? event.getLocation() : "")));
+            String summary = (event.getSummary() != null && !event.getSummary().isBlank())
+                    ? event.getSummary()
+                    :created.getOrDefault("summary","");
+            String date = created.getOrDefault("date","");
+            String time = created.getOrDefault("time","");
+            String id = created.getOrDefault("id","");
+            String guests = created.getOrDefault("guests","");
+            String location = created.getOrDefault("location","");
+            return new ObjectMapper().writeValueAsString(
+                    List.of(Map.of("role","event","summary",summary,"date",date,"time",time,"id",id,"guests",guests,"location",location)));
         } catch (Exception e) {
-            return buildFallbackMessage(event.getSummary());
+            return buildFallbackMessage("Could not build event card.");
         }
     }
 
@@ -43,8 +52,14 @@ public class EventResponseBuilder {
     public String buildEventList(List<Map<String, String>> events, String calendarId) {
         try {
             List<Map<String, String>> responseList = new ArrayList<>();
-            for (Map<String, String> event : events) {
-                responseList.add(Map.of("role", "event", "summary", event.get("summary"), "date", event.get("start").split(" ")[0], "time", event.get("start").split(" ")[1] + " - " + event.get("end").split(" ")[1], "location", event.getOrDefault("location", "No location"), "calendarId", calendarId, "id", event.get("id"), "guests", event.getOrDefault("guests", "")));
+            for (Map<String, String> ev : events) {
+                String summary = ev.getOrDefault("summary","");
+                String date = ev.getOrDefault("date","");
+                String time = ev.getOrDefault("time","");
+                String id = ev.getOrDefault("id","");
+                String guests = ev.getOrDefault("guests","");
+                String location = ev.getOrDefault("location","");
+                responseList.add(Map.of("role","event","summary",summary,"date",date,"time",time,"id",id,"guests",guests,"location",location));
             }
             return new ObjectMapper().writeValueAsString(responseList);
         } catch (Exception e) {
