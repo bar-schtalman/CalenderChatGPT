@@ -124,8 +124,8 @@ public class ConversationService {
 
     }
 
-   private static final java.time.ZoneId IL_TZ = java.time.ZoneId.of("Asia/Jerusalem");
-private static final String LRM = "\u200E"; // Left-to-Right Mark כדי לייצב את "HH:mm - HH:mm" בעברית
+private static final java.time.ZoneId IL_TZ = java.time.ZoneId.of("Asia/Jerusalem");
+private static final String LRM = "\u200E"; // לייצוב כיווניות HH:mm - HH:mm בעברית
 
 private String handleAvailability(JsonNode details, String calendarId, User user) {
     try {
@@ -135,27 +135,24 @@ private String handleAvailability(JsonNode details, String calendarId, User user
             return wrapAsJson("❌ Missing start/end for availability check.", "ai");
         }
 
-        // נפרש תמיד UTC-Z ואז נהפוך לזמן ישראל
+        // פרשנות תמיד מתוך UTC Z → לשעון ישראל
         var sUTC = java.time.OffsetDateTime.parse(startStr);
         var eUTC = java.time.OffsetDateTime.parse(endStr);
         var s    = sUTC.withOffsetSameInstant(java.time.ZoneOffset.UTC).atZoneSameInstant(IL_TZ);
         var e    = eUTC.withOffsetSameInstant(java.time.ZoneOffset.UTC).atZoneSameInstant(IL_TZ);
 
-        // --- נרמול "יום מלא" ---
-        // יש מקרים שה-LLM מחזיר טווח שקרוב ל-24 שעות אבל עם היסט (למשל 03:00 -> למחרת 02:59:59),
-        // נזהה "יום מלא" לפי משך >= 20 שעות או דפוסים נפוצים, ונכריח 00:00–23:59:59 מקומי.
+        // נרמול "יום מלא" (מקרי 03:00→02:59 וכד׳)
         var dur = java.time.Duration.between(s, e);
         boolean looksLikeFullDay =
                 dur.toHours() >= 20
              || (s.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)
-                 && (e.toLocalDate().equals(s.toLocalDate())
-                     && (e.toLocalTime().equals(java.time.LocalTime.of(23,59))
-                         || e.toLocalTime().equals(java.time.LocalTime.of(23,59,59)))))
+                 && e.toLocalDate().equals(s.toLocalDate())
+                 && (e.toLocalTime().equals(java.time.LocalTime.of(23,59))
+                     || e.toLocalTime().equals(java.time.LocalTime.of(23,59,59))))
              || (e.toLocalDate().equals(s.toLocalDate().plusDays(1))
-                 && (s.toLocalTime().equals(java.time.LocalTime.of(3,0))
-                     && (e.toLocalTime().equals(java.time.LocalTime.of(2,59))
-                         || e.toLocalTime().equals(java.time.LocalTime.of(2,59,59)))));
-
+                 && s.toLocalTime().equals(java.time.LocalTime.of(3,0))
+                 && (e.toLocalTime().equals(java.time.LocalTime.of(2,59))
+                     || e.toLocalTime().equals(java.time.LocalTime.of(2,59,59))));
         if (looksLikeFullDay) {
             var dayStart = s.toLocalDate().atStartOfDay(IL_TZ);
             var dayEnd   = dayStart.plusDays(1).minusSeconds(1);
@@ -165,46 +162,82 @@ private String handleAvailability(JsonNode details, String calendarId, User user
 
         boolean sameDay = s.toLocalDate().equals(e.toLocalDate());
 
-        // דיבאג עדין (יעזור לך לראות מה הגיע אחרי הנרמול)
+        // דיבאג עדין
         org.slf4j.LoggerFactory.getLogger(ConversationService.class)
                 .info("AVAILABILITY range (IL): {} -> {}", s, e);
 
-        // חישוב כל חלונות הזמן הפנויים בטווח
-        java.util.List<String> windows = eventService.findFreeWindows(calendarId, s, e, user);
+        // נדרש ISO-UTC עבור EventService.getEventsInDateRange
+        String sUtcIso = s.withZoneSameInstant(java.time.ZoneOffset.UTC).toInstant().toString();
+        String eUtcIso = e.withZoneSameInstant(java.time.ZoneOffset.UTC).toInstant().toString();
 
-        if (windows.isEmpty()) {
-            if (sameDay && s.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)
-                        && e.toLocalTime().equals(java.time.LocalTime.of(23, 59, 59))) {
-                return wrapAsJson("אין זמינות ביום " + s.toLocalDate() + ".", "ai");
-            }
-            return wrapAsJson("אין זמינות בטווח שביקשת.", "ai");
-        }
-
-        // עיטוף ב-LRM כדי למנוע היפוך כיווניות ב-RTL (19:00 - 21:00 יוצג בסדר נכון)
-        java.util.function.Function<String,String> rtlSafe = t -> LRM + t + LRM;
-
-        if (windows.size() == 1) {
-            String label = rtlSafe.apply(windows.get(0));
-            if (sameDay && label.contains("00:00") && (label.contains("23:59"))) {
-                return wrapAsJson("כל היום פנוי (" + s.toLocalDate() + ").", "ai");
-            }
-            if (sameDay) {
-                return wrapAsJson("אתה פנוי לכל הטווח: " + label + " ביום " + s.toLocalDate() + ".", "ai");
-            } else {
-                return wrapAsJson("אתה פנוי בטווח: " + label + ".", "ai");
-            }
-        }
-
-        String joined = rtlSafe.apply(String.join(", ", windows));
         if (sameDay) {
-            return wrapAsJson("הזמינות ביום " + s.toLocalDate() + ": " + joined + ".", "ai");
-        } else {
-            return wrapAsJson("חלונות זמינות בטווח שביקשת: " + joined + ".", "ai");
+            // --- יום אחד: נציג חלונות פנויים; ואם יש אירועים חופפים – גם כרטיסי אירועים ---
+            java.util.List<String> windows = eventService.findFreeWindows(calendarId, s, e, user);
+
+            // נביא אירועים בטווח כדי שנוכל להציג כרטיסים אם יש חפיפה
+            java.util.List<java.util.Map<String, String>> overlapping =
+                    eventService.getEventsInDateRange(calendarId, sUtcIso, eUtcIso, user);
+
+            // מחולל מחרוזת בטוחה ל-RTL
+            java.util.function.Function<String,String> rtlSafe = t -> LRM + t + LRM;
+
+            // 1) אין חלונות → אין זמינות
+            if (windows.isEmpty()) {
+                if (s.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)
+                        && e.toLocalTime().equals(java.time.LocalTime.of(23, 59, 59))) {
+                    // כל היום תפוס
+                    if (overlapping != null && !overlapping.isEmpty()) {
+                        // נחזיר כרטיסי אירועים במקום טקסט בלבד
+                        return eventResponseBuilder.buildEventList(overlapping, calendarId);
+                    }
+                    return wrapAsJson("אין זמינות ביום " + s.toLocalDate() + ".", "ai");
+                }
+                if (overlapping != null && !overlapping.isEmpty()) {
+                    return eventResponseBuilder.buildEventList(overlapping, calendarId);
+                }
+                return wrapAsJson("אין זמינות בטווח שביקשת.", "ai");
+            }
+
+            // 2) כל הטווח/כל היום פנוי
+            if (windows.size() == 1) {
+                String label = windows.get(0);
+                if (label.startsWith("00:00") && (label.endsWith("23:59") || label.endsWith("23:59:59"))) {
+                    return wrapAsJson("כל היום פנוי (" + s.toLocalDate() + ").", "ai");
+                }
+                // אם ביקשת טווח שעות ספציפי והוא פנוי כולו
+                return wrapAsJson("אתה פנוי לכל הטווח: " + rtlSafe.apply(label) + " ביום " + s.toLocalDate() + ".", "ai");
+            }
+
+            // 3) חלקית פנוי – נחזיר חלונות; ואם יש אירועים חופפים, נוסיף גם כרטיסים
+            String joined = rtlSafe.apply(String.join(", ", windows));
+
+            if (overlapping == null || overlapping.isEmpty()) {
+                return wrapAsJson("הזמינות ביום " + s.toLocalDate() + ": " + joined + ".", "ai");
+            }
+
+            // מחזירים כרטיסים של האירועים החופפים (נוח לעריכה)
+            return eventResponseBuilder.buildEventList(overlapping, calendarId);
         }
+
+        // --- כמה ימים: אם אין אירועים → פנוי; אם יש → כרטיסי אירועים ---
+        java.util.List<java.util.Map<String, String>> events =
+                eventService.getEventsInDateRange(calendarId, sUtcIso, eUtcIso, user);
+
+        if (events == null || events.isEmpty()) {
+            String sDisp = s.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"));
+            String eDisp = e.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"));
+            return wrapAsJson("אתה פנוי לכל הטווח: " + LRM + sDisp + " - " + eDisp + LRM + ".", "ai");
+        }
+
+        // יש אירועים – נחזיר כרטיסים כדי שאפשר יהיה לערוך מיד
+        return eventResponseBuilder.buildEventList(events, calendarId);
+
     } catch (Exception ex) {
         return wrapAsJson("❌ Failed to compute availability: " + ex.getMessage(), "ai");
     }
 }
+
+
 
 
     private String mergeWithPreviousSummary(String prompt, User user) {
