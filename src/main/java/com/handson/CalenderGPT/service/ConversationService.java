@@ -124,69 +124,87 @@ public class ConversationService {
 
     }
 
-    private String handleAvailability(JsonNode details, String calendarId, User user) {
-        try {
-            String startStr = details.path("start").asText("");
-            String endStr   = details.path("end").asText("");
-            if (startStr.isEmpty() || endStr.isEmpty()) {
-                return wrapAsJson("❌ Missing start/end for availability check.", "ai");
-            }
+   private static final java.time.ZoneId IL_TZ = java.time.ZoneId.of("Asia/Jerusalem");
+private static final String LRM = "\u200E"; // Left-to-Right Mark כדי לייצב את "HH:mm - HH:mm" בעברית
 
-            var tz = java.time.ZoneId.of("Asia/Jerusalem");
-
-            // תמיד נפרש את ה־Z כ־UTC ונמיר לא"י
-            var s  = java.time.OffsetDateTime.parse(startStr)
-                    .withOffsetSameInstant(java.time.ZoneOffset.UTC)
-                    .atZoneSameInstant(tz);
-            var e  = java.time.OffsetDateTime.parse(endStr)
-                    .withOffsetSameInstant(java.time.ZoneOffset.UTC)
-                    .atZoneSameInstant(tz);
-
-            // אם המשתמש נתן רק תאריך (ללא שעות) → נדרוס ל־00:00–23:59
-            if (s.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)
-                    && e.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)) {
-                e = s.plusDays(1).minusSeconds(1);
-            }
-
-            boolean sameDay = s.toLocalDate().equals(e.toLocalDate());
-
-            // מביאים את כל חלונות הזמן הפנויים
-            java.util.List<String> windows = eventService.findFreeWindows(calendarId, s, e, user);
-
-            if (windows.isEmpty()) {
-                if (sameDay && s.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)
-                        && e.toLocalTime().equals(java.time.LocalTime.of(23, 59, 59))) {
-                    return wrapAsJson("אין זמינות ביום " + s.toLocalDate() + ".", "ai");
-                }
-                return wrapAsJson("אין זמינות בטווח שביקשת.", "ai");
-            }
-
-            // חלון יחיד שמכסה את כל הטווח
-            if (windows.size() == 1) {
-                String label = windows.get(0);
-                if (sameDay && label.startsWith("00:00")
-                        && (label.endsWith("23:59") || label.endsWith("23:59:59"))) {
-                    return wrapAsJson("כל היום פנוי (" + s.toLocalDate() + ").", "ai");
-                }
-                if (sameDay) {
-                    return wrapAsJson("אתה פנוי לכל הטווח: " + label + " ביום " + s.toLocalDate() + ".", "ai");
-                } else {
-                    return wrapAsJson("אתה פנוי בטווח: " + label + ".", "ai");
-                }
-            }
-
-            // כמה חלונות – נחזיר רשימה
-            String joined = String.join(", ", windows);
-            if (sameDay) {
-                return wrapAsJson("הזמינות ביום " + s.toLocalDate() + ": " + joined + ".", "ai");
-            } else {
-                return wrapAsJson("חלונות זמינות בטווח שביקשת: " + joined + ".", "ai");
-            }
-        } catch (Exception ex) {
-            return wrapAsJson("❌ Failed to compute availability: " + ex.getMessage(), "ai");
+private String handleAvailability(JsonNode details, String calendarId, User user) {
+    try {
+        String startStr = details.path("start").asText("");
+        String endStr   = details.path("end").asText("");
+        if (startStr.isEmpty() || endStr.isEmpty()) {
+            return wrapAsJson("❌ Missing start/end for availability check.", "ai");
         }
-    }
 
+        // נפרש תמיד UTC-Z ואז נהפוך לזמן ישראל
+        var sUTC = java.time.OffsetDateTime.parse(startStr);
+        var eUTC = java.time.OffsetDateTime.parse(endStr);
+        var s    = sUTC.withOffsetSameInstant(java.time.ZoneOffset.UTC).atZoneSameInstant(IL_TZ);
+        var e    = eUTC.withOffsetSameInstant(java.time.ZoneOffset.UTC).atZoneSameInstant(IL_TZ);
+
+        // --- נרמול "יום מלא" ---
+        // יש מקרים שה-LLM מחזיר טווח שקרוב ל-24 שעות אבל עם היסט (למשל 03:00 -> למחרת 02:59:59),
+        // נזהה "יום מלא" לפי משך >= 20 שעות או דפוסים נפוצים, ונכריח 00:00–23:59:59 מקומי.
+        var dur = java.time.Duration.between(s, e);
+        boolean looksLikeFullDay =
+                dur.toHours() >= 20
+             || (s.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)
+                 && (e.toLocalDate().equals(s.toLocalDate())
+                     && (e.toLocalTime().equals(java.time.LocalTime.of(23,59))
+                         || e.toLocalTime().equals(java.time.LocalTime.of(23,59,59)))))
+             || (e.toLocalDate().equals(s.toLocalDate().plusDays(1))
+                 && (s.toLocalTime().equals(java.time.LocalTime.of(3,0))
+                     && (e.toLocalTime().equals(java.time.LocalTime.of(2,59))
+                         || e.toLocalTime().equals(java.time.LocalTime.of(2,59,59)))));
+
+        if (looksLikeFullDay) {
+            var dayStart = s.toLocalDate().atStartOfDay(IL_TZ);
+            var dayEnd   = dayStart.plusDays(1).minusSeconds(1);
+            s = dayStart;
+            e = dayEnd;
+        }
+
+        boolean sameDay = s.toLocalDate().equals(e.toLocalDate());
+
+        // דיבאג עדין (יעזור לך לראות מה הגיע אחרי הנרמול)
+        org.slf4j.LoggerFactory.getLogger(ConversationService.class)
+                .info("AVAILABILITY range (IL): {} -> {}", s, e);
+
+        // חישוב כל חלונות הזמן הפנויים בטווח
+        java.util.List<String> windows = eventService.findFreeWindows(calendarId, s, e, user);
+
+        if (windows.isEmpty()) {
+            if (sameDay && s.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)
+                        && e.toLocalTime().equals(java.time.LocalTime.of(23, 59, 59))) {
+                return wrapAsJson("אין זמינות ביום " + s.toLocalDate() + ".", "ai");
+            }
+            return wrapAsJson("אין זמינות בטווח שביקשת.", "ai");
+        }
+
+        // עיטוף ב-LRM כדי למנוע היפוך כיווניות ב-RTL (19:00 - 21:00 יוצג בסדר נכון)
+        java.util.function.Function<String,String> rtlSafe = t -> LRM + t + LRM;
+
+        if (windows.size() == 1) {
+            String label = rtlSafe.apply(windows.get(0));
+            if (sameDay && label.contains("00:00") && (label.contains("23:59"))) {
+                return wrapAsJson("כל היום פנוי (" + s.toLocalDate() + ").", "ai");
+            }
+            if (sameDay) {
+                return wrapAsJson("אתה פנוי לכל הטווח: " + label + " ביום " + s.toLocalDate() + ".", "ai");
+            } else {
+                return wrapAsJson("אתה פנוי בטווח: " + label + ".", "ai");
+            }
+        }
+
+        String joined = rtlSafe.apply(String.join(", ", windows));
+        if (sameDay) {
+            return wrapAsJson("הזמינות ביום " + s.toLocalDate() + ": " + joined + ".", "ai");
+        } else {
+            return wrapAsJson("חלונות זמינות בטווח שביקשת: " + joined + ".", "ai");
+        }
+    } catch (Exception ex) {
+        return wrapAsJson("❌ Failed to compute availability: " + ex.getMessage(), "ai");
+    }
+}
 
 
     private String mergeWithPreviousSummary(String prompt, User user) {
