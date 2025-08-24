@@ -6,9 +6,10 @@ import com.theokanning.openai.completion.chat.ChatCompletionResult;
 import com.theokanning.openai.completion.chat.ChatMessage;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,76 +17,73 @@ import java.util.List;
 @Service
 public class IntentService {
 
-    private final ChatGPTService chatGPTService;
+    private static final ZoneId IL_TZ = ZoneId.of("Asia/Jerusalem");
+    private static final DateTimeFormatter ISO_DATE = DateTimeFormatter.ISO_DATE;
 
-    private final String today;
-    private final String tomorrow;
-    private final String thisWeekStart;
-    private final String thisWeekEnd;
-    private final String nextWeek;
+    private final ChatGPTService chatGPTService;
 
     public IntentService(ChatGPTService chatGPTService) {
         this.chatGPTService = chatGPTService;
-
-        LocalDate todayDate = LocalDate.now();
-        this.today = todayDate.format(DateTimeFormatter.ISO_DATE);
-        this.tomorrow = todayDate.plusDays(1).format(DateTimeFormatter.ISO_DATE);
-
-        // This week: today until coming Saturday
-        LocalDate thisWeekEndDate = todayDate.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
-        this.thisWeekStart = todayDate.format(DateTimeFormatter.ISO_DATE);
-        this.thisWeekEnd = thisWeekEndDate.format(DateTimeFormatter.ISO_DATE);
-
-        // Next week: Sunday until Saturday
-        this.nextWeek = todayDate.with(TemporalAdjusters.next(DayOfWeek.SUNDAY))
-                                 .plusDays(6)
-                                 .format(DateTimeFormatter.ISO_DATE);
     }
 
     public String extractDetailsFromPrompt(String prompt) {
-        LocalDate today = LocalDate.now();
+        // עוגנים דינמיים לפי Asia/Jerusalem
+        LocalDate today = LocalDate.now(IL_TZ);
         LocalDate tomorrow = today.plusDays(1);
+
+        // "השבוע": מהיום ועד שבת הקרובה (מקסימום 7 ימים)
         LocalDate thisWeekStart = today;
-        LocalDate thisWeekEnd = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
-        LocalDate nextWeek = today.with(TemporalAdjusters.next(DayOfWeek.SUNDAY))
-                                  .plusDays(6);
+        LocalDate thisWeekEndSaturday = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
+
+        // "שבוע הבא": ראשון–שבת הבאים (תמיד 7 ימים)
+        LocalDate nextWeekStartSunday = today.with(TemporalAdjusters.next(DayOfWeek.SUNDAY));
+        LocalDate nextWeekEndSaturday = nextWeekStartSunday.plusDays(6);
 
         String extractionPrompt =
-                "Analyze the following text and determine if it represents an event-related request (Create, Edit, Delete, View). "
-              + "If it is event-related, return a structured JSON object with the following fields: "
-              + "\"intent\" (CREATE, EDIT, DELETE, VIEW), "
-              + "\"summary\", \"description\", \"start\", \"end\", \"location\". "
+                // תיאור כללי
+                "Analyze the following text and determine if it represents an event-related request (Create, Edit, Delete, View). " +
+                "If it is event-related, return a structured JSON object with the following fields: " +
+                "\"intent\" (CREATE, EDIT, DELETE, VIEW), " +
+                "\"summary\", \"description\", \"start\", \"end\", \"location\". " +
 
-              + "Ensure both \"start\" and \"end\" are in full ISO 8601 format with milliseconds and Z (e.g., 2025-04-09T15:00:00.000Z). "
+                // פורמט חובה של start/end
+                "Ensure both \"start\" and \"end\" are in full ISO 8601 format with milliseconds and Z (e.g., 2025-04-09T15:00:00.000Z). " +
 
-              + "IMPORTANT: For ALL intents, if \"start\" is provided but \"end\" is missing, set \"end\" to 1 hour after \"start\". "
-              + "If \"start\" is not provided at all, leave both \"start\" and \"end\" as empty strings (\"\"). "
-              + "Do NOT assume a full day or any default times based on the intent. "
+                // כלל ברירת מחדל ל-end
+                "IMPORTANT: For ALL intents, if \"start\" is provided but \"end\" is missing, set \"end\" to 1 hour after \"start\". " +
+                "If \"start\" is not provided at all, leave both \"start\" and \"end\" as empty strings (\"\"). " +
 
-              + "Use these time references when interpreting phrases: "
-              + "today = " + today.format(DateTimeFormatter.ISO_DATE)
-              + ", tomorrow = " + tomorrow.format(DateTimeFormatter.ISO_DATE)
-              + ", this week = " + thisWeekStart.format(DateTimeFormatter.ISO_DATE) + " - " + thisWeekEnd.format(DateTimeFormatter.ISO_DATE)
-              + ", next week = " + nextWeek.format(DateTimeFormatter.ISO_DATE) + ". "
-              + "If a date does not include a year, use the current year if the date is still upcoming, otherwise use the next year. "
-              + "If a date includes a past year, adjust it to the next valid future occurrence by adding one year. "
+                // כללי "השבוע" ו"שבוע הבא" (Asia/Jerusalem; שבוע ראשון–שבת)
+                "INTERPRETATION RULES (Asia/Jerusalem; week = Sunday–Saturday): " +
+                "\"this week\" means from TODAY until the UPCOMING SATURDAY (at most 7 days). " +
+                "\"next week\" means the NEXT Sunday–Saturday block (always 7 days). " +
+                "When the user says \"this week\", set start to TODAY 00:00:00.000Z and end to SATURDAY 23:59:59.000Z of that week. " +
+                "When the user says \"next week\", set start to NEXT SUNDAY 00:00:00.000Z and end to NEXT SATURDAY 23:59:59.000Z. " +
 
-              + "EXAMPLES:  \n"
-              + "        Text: \"What's on my calendar tomorrow?\"  \n"
-              + "        → {\"intent\":\"VIEW\",\"summary\":\"\",\"description\":\"\",\"start\":\"2025-05-16T00:00:00.000Z\",\"end\":\"2025-05-16T23:59:59.000Z\",\"location\":\"\"}  \n"
-              + "\n"
-              + "        Text: \"List events in April\"  \n"
-              + "        → {\"intent\":\"VIEW\",\"summary\":\"\",\"description\":\"\",\"start\":\"2025-04-01T00:00:00.000Z\",\"end\":\"2025-04-30T23:59:59.000Z\",\"location\":\"\"}  \n"
-              + "\n"
-              + "        Text: \"Tell me a joke\"  \n"
-              + "        → {\"intent\":\"NONE\",\"message\":\"Sure, here's one...\"}  "
+                // עוגנים מספריים כדי לייצב את הפענוח
+                ("Use these time anchors (computed for Asia/Jerusalem): " +
+                 "today=" + today.format(ISO_DATE) +
+                 ", tomorrow=" + tomorrow.format(ISO_DATE) +
+                 ", this_week_start=" + thisWeekStart.format(ISO_DATE) +
+                 ", this_week_end=" + thisWeekEndSaturday.format(ISO_DATE) +
+                 ", next_week_start=" + nextWeekStartSunday.format(ISO_DATE) +
+                 ", next_week_end=" + nextWeekEndSaturday.format(ISO_DATE) + ". ") +
 
-              + "If the request is not related to an event (e.g., a song, story, poem), return {\"intent\": \"NONE\", \"message\": \"response text\"}. "
+                // טיפול בשנה
+                "If a date does not include a year, use the current year if the date is still upcoming, otherwise use the next year. " +
+                "If a date includes a past year, adjust it to the next valid future occurrence by adding one year. " +
 
-              + "Respond only with raw JSON — no markdown, no extra text, and no formatting. "
-              + "Text: \"" + prompt + "\"";
+                // אם לא אירוע – NONE
+                "If the request is not related to an event, return {\"intent\": \"NONE\", \"message\": \"...\"}. " +
+
+                // פלט JSON גולמי בלבד
+                "Respond only with raw JSON — no markdown, no extra text. " +
+
+                // הטקסט לניתוח
+                "Text: \"" + prompt + "\"";
 
         List<ChatMessage> messages = new ArrayList<>();
+        // נשארים עם הודעת system אחת, כמו אצלך – רק עם הכללים החדשים
         messages.add(new ChatMessage("system", extractionPrompt));
 
         ChatCompletionResult result = chatGPTService.callChatGPT(messages);
