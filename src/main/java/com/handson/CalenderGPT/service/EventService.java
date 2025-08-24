@@ -363,13 +363,15 @@ public class EventService {
 
         final String calId = effectiveCalendarId(calendarId);
         Calendar googleCalendarClient = clientFor(user);
+        Instant startInstant = Instant.parse(startDate);
+        Instant endInstant = Instant.parse(endDate);
 
-// בחר TZ להצגה/חישוב (אפשר גם לשמור אצל המשתמש אם יש לך שדה עתידי)
+
+        // בחר TZ להצגה/חישוב (אפשר גם לשמור אצל המשתמש אם יש לך שדה עתידי)
         ZoneId zone = ZoneId.of(DEFAULT_TZ);
 
 // הפרשנות: המחרוזות שמגיעות הן ימי-קצה (למשל "2025-08-21T00:00:00.000Z")
 // אבל אנחנו רוצים "היום" באזור הזמן המקומי (כדי לא לאבד אירועי 00:15/23:30)
-        Instant startInstant = Instant.parse(startDate); // לא קריטי, רק כדי להוציא LocalDate
         LocalDate day = startInstant.atZone(zone).toLocalDate();
 
         Instant min = day.atStartOfDay(zone).toInstant();
@@ -377,8 +379,8 @@ public class EventService {
 
         Events events = googleCalendarClient.events()
                 .list(calId)
-                .setTimeMin(new DateTime(min.toEpochMilli()))
-                .setTimeMax(new DateTime(max.toEpochMilli()))
+                .setTimeMin(new DateTime(startInstant.toEpochMilli()))
+                .setTimeMax(new DateTime(endInstant.toEpochMilli()))
                 .setOrderBy("startTime")
                 .setSingleEvents(true)
                 .setTimeZone(DEFAULT_TZ) // חשוב כדי שסטארט/אנד יגיעו לפי ה-TZ הזה
@@ -388,6 +390,103 @@ public class EventService {
         return events.getItems().stream().map(this::mapEvent).collect(Collectors.toList());
 
     }
+
+    /**
+     * Returns free windows between [from,to) in Asia/Jerusalem, as list of "HH:mm - HH:mm" strings.
+     * The windows cover any time not occupied by events (including all-day events).
+     */
+    public List<String> findFreeWindows(String calendarId, ZonedDateTime from, ZonedDateTime to, User user)
+            throws IOException, GeneralSecurityException {
+        final String calId = effectiveCalendarId(calendarId);
+        Calendar googleCalendarClient = clientFor(user);
+
+        ZonedDateTime start = from.withZoneSameInstant(ZoneId.of(DEFAULT_TZ));
+        ZonedDateTime end   = to.withZoneSameInstant(ZoneId.of(DEFAULT_TZ));
+        if (!end.isAfter(start)) return List.of();
+
+        Events events = googleCalendarClient.events()
+                .list(calId)
+                .setTimeMin(new DateTime(start.toInstant().toEpochMilli()))
+                .setTimeMax(new DateTime(end.toInstant().toEpochMilli()))
+                .setOrderBy("startTime")
+                .setSingleEvents(true)
+                .setTimeZone(DEFAULT_TZ)
+                .setFields("items(start,end)")
+                .execute();
+
+        List<ZonedDateTime> busyS = new ArrayList<>();
+        List<ZonedDateTime> busyE = new ArrayList<>();
+
+        for (var ev : events.getItems()) {
+            EventDateTime s = ev.getStart();
+            EventDateTime e = ev.getEnd();
+            if (s == null || e == null) continue;
+
+            String tz = (s.getTimeZone() != null && !s.getTimeZone().isBlank())
+                    ? s.getTimeZone() : DEFAULT_TZ;
+            ZoneId evZone = ZoneId.of(tz);
+
+            long sMs = (s.getDateTime() != null ? s.getDateTime().getValue() : s.getDate().getValue());
+            long eMs = (e.getDateTime() != null ? e.getDateTime().getValue() : e.getDate().getValue());
+
+            ZonedDateTime es = ZonedDateTime.ofInstant(Instant.ofEpochMilli(sMs), evZone)
+                    .withZoneSameInstant(ZoneId.of(DEFAULT_TZ));
+            ZonedDateTime ee = ZonedDateTime.ofInstant(Instant.ofEpochMilli(eMs), evZone)
+                    .withZoneSameInstant(ZoneId.of(DEFAULT_TZ));
+
+            // clip to [start, end)
+            if (ee.isBefore(start) || es.isAfter(end)) continue;
+            if (es.isBefore(start)) es = start;
+            if (ee.isAfter(end))    ee = end;
+
+            busyS.add(es);
+            busyE.add(ee);
+        }
+
+        // merge busy intervals
+        List<Integer> order = new ArrayList<>();
+        for (int i = 0; i < busyS.size(); i++) order.add(i);
+        order.sort(Comparator.comparing(busyS::get));
+
+        List<ZonedDateTime> mS = new ArrayList<>();
+        List<ZonedDateTime> mE = new ArrayList<>();
+        for (int idx : order) {
+            ZonedDateTime cs = busyS.get(idx), ce = busyE.get(idx);
+            if (mS.isEmpty()) {
+                mS.add(cs); mE.add(ce);
+            } else {
+                ZonedDateTime ls = mS.get(mS.size() - 1);
+                ZonedDateTime le = mE.get(mE.size() - 1);
+                if (!cs.isAfter(le)) { // overlap/adjacent
+                    if (ce.isAfter(le)) mE.set(mE.size() - 1, ce);
+                } else {
+                    mS.add(cs); mE.add(ce);
+                }
+            }
+        }
+
+        // free = gaps
+        List<String> free = new ArrayList<>();
+        ZonedDateTime cursor = start;
+        for (int i = 0; i < mS.size(); i++) {
+            ZonedDateTime bs = mS.get(i);
+            if (cursor.isBefore(bs)) {
+                free.add(fmt(cursor) + " - " + fmt(bs));
+            }
+            ZonedDateTime be = mE.get(i);
+            if (be.isAfter(cursor)) cursor = be;
+        }
+        if (cursor.isBefore(end)) {
+            free.add(fmt(cursor) + " - " + fmt(end));
+        }
+        return free;
+    }
+
+    private static String fmt(ZonedDateTime zdt) {
+        var t = zdt.toLocalTime();
+        return String.format("%02d:%02d", t.getHour(), t.getMinute());
+    }
+
 
     public Map<String, String> getEventById(String calendarId, String eventId, User user)
             throws IOException, GeneralSecurityException {

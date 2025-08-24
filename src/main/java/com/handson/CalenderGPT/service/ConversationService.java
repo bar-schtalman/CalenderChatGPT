@@ -94,6 +94,9 @@ public class ConversationService {
         if (intent == IntentType.VIEW_EVENTS) {
             return handleViewEvents(details, calendarContext.getCalendarId(), user);
         }
+        if (intent == IntentType.AVAILABILITY){
+            return handleAvailability(details, calendarContext.getCalendarId(), user);
+        }
 
         // intent מסוג CREATE/EDIT/DELETE — נבדוק אם יש מספיק פרטים
         PendingEventState state = buildOrUpdateState(details, prev);
@@ -120,6 +123,58 @@ public class ConversationService {
         return resultJson;
 
     }
+
+    private String handleAvailability(JsonNode details, String calendarId, User user) {
+        try {
+            String startStr = details.path("start").asText("");
+            String endStr   = details.path("end").asText("");
+            if (startStr.isEmpty() || endStr.isEmpty()) {
+                return wrapAsJson("❌ Missing start/end for availability check.", "ai");
+            }
+            var s  = java.time.OffsetDateTime.parse(startStr);
+            var e  = java.time.OffsetDateTime.parse(endStr);
+            var zs = s.atZoneSameInstant(java.time.ZoneId.of("Asia/Jerusalem"));
+            var ze = e.atZoneSameInstant(java.time.ZoneId.of("Asia/Jerusalem"));
+
+            boolean sameDay = zs.toLocalDate().equals(ze.toLocalDate());
+
+            // מביאים את כל חלונות הזמן הפנויים בטווח שהמשתמש ביקש (לא רק שעות עבודה)
+            java.util.List<String> windows = eventService.findFreeWindows(calendarId, zs, ze, user);
+
+            if (windows.isEmpty()) {
+                if (sameDay
+                        && zs.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)
+                        && ze.toLocalTime().equals(java.time.LocalTime.of(23, 59, 59))) {
+                    return wrapAsJson("אין זמינות ביום " + zs.toLocalDate() + ".", "ai");
+                }
+                return wrapAsJson("אין זמינות בטווח שביקשת.", "ai");
+            }
+
+            // חלון יחיד שמכסה את כל הטווח -> כל היום/כל הטווח פנוי
+            if (windows.size() == 1) {
+                String label = windows.get(0); // e.g. "00:00 - 23:59"
+                if (sameDay && label.startsWith("00:00") && (label.endsWith("23:59") || label.endsWith("23:59:59"))) {
+                    return wrapAsJson("כל היום פנוי (" + zs.toLocalDate() + ").", "ai");
+                }
+                if (sameDay) {
+                    return wrapAsJson("אתה פנוי לכל הטווח: " + label + " ביום " + zs.toLocalDate() + ".", "ai");
+                } else {
+                    return wrapAsJson("אתה פנוי בטווח: " + label + ".", "ai");
+                }
+            }
+
+            // כמה חלונות – נחזיר רשימה
+            String joined = String.join(", ", windows);
+            if (sameDay) {
+                return wrapAsJson("הזמינות ביום " + zs.toLocalDate() + ": " + joined + ".", "ai");
+            } else {
+                return wrapAsJson("חלונות זמינות בטווח שביקשת: " + joined + ".", "ai");
+            }
+        } catch (Exception ex) {
+            return wrapAsJson("❌ Failed to compute availability: " + ex.getMessage(), "ai");
+        }
+    }
+
 
     private String mergeWithPreviousSummary(String prompt, User user) {
         PendingEventState prev = pendingEvents.get(user.getId());
@@ -240,6 +295,7 @@ public class ConversationService {
             case "EDIT" -> IntentType.EDIT_EVENT;
             case "DELETE" -> IntentType.DELETE_EVENT;
             case "VIEW" -> IntentType.VIEW_EVENTS;
+            case "AVAILABILITY" -> IntentType.AVAILABILITY;
             default -> IntentType.NONE;
         };
     }
