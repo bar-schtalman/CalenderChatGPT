@@ -41,9 +41,9 @@ public class IntentService {
 
         String extractionPrompt =
                 // תיאור כללי
-                "Analyze the following text and determine if it represents an event-related request (Create, Edit, Delete, View). " +
+                "Analyze the following text and determine if it represents an event-related request (Create, Edit, Delete, View, Availability ). " +
                 "If it is event-related, return a structured JSON object with the following fields: " +
-                "\"intent\" (CREATE, EDIT, DELETE, VIEW), " +
+                "\"intent\" (CREATE, EDIT, DELETE, VIEW, AVAILABILITY), " +
                 "\"summary\", \"description\", \"start\", \"end\", \"location\". " +
 
                 // פורמט חובה של start/end
@@ -60,6 +60,12 @@ public class IntentService {
                 "When the user says \"this week\", set start to TODAY 00:00:00.000Z and end to SATURDAY 23:59:59.000Z of that week. " +
                 "When the user says \"next week\", set start to NEXT SUNDAY 00:00:00.000Z and end to NEXT SATURDAY 23:59:59.000Z. " +
 
+                // ✅ תוספת מינימלית: חוקים ל-AVAILABILITY (בלי לשנות נוסח קיים)
+                "AVAILABILITY rules (\"when am I free\", \"am I free at\", \"מתי אני פנוי\", \"האם אני פנוי\"): " +
+                "If only a DATE is mentioned, set intent=AVAILABILITY and set start=DATE 00:00:00.000Z, end=DATE 23:59:59.000Z. " +
+                "If a TIME RANGE is mentioned with the date, set that exact start/end. " +
+                "If a single TIME is mentioned with the date, set a 1-hour window starting at that time. " +
+
                 // עוגנים מספריים כדי לייצב את הפענוח
                 ("Use these time anchors (computed for Asia/Jerusalem): " +
                  "today=" + today.format(ISO_DATE) +
@@ -73,7 +79,7 @@ public class IntentService {
                 "If a date does not include a year, use the current year if the date is still upcoming, otherwise use the next year. " +
                 "If a date includes a past year, adjust it to the next valid future occurrence by adding one year. " +
 
-                // אם לא אירוע – NONE
+                // אם לא אירוע – NONE (נשאר בדיוק בנוסח שלך)
                 "If the request is not related to an event, return {\"intent\": \"NONE\", \"message\": \"...\"}. " +
 
                 // פלט JSON גולמי בלבד
@@ -83,7 +89,7 @@ public class IntentService {
                 "Text: \"" + prompt + "\"";
 
         List<ChatMessage> messages = new ArrayList<>();
-        // נשארים עם הודעת system אחת, כמו אצלך – רק עם הכללים החדשים
+        // נשארים עם הודעת system אחת, כמו אצלך – רק עם ההוספות
         messages.add(new ChatMessage("system", extractionPrompt));
 
         ChatCompletionResult result = chatGPTService.callChatGPT(messages);
