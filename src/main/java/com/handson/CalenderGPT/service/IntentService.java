@@ -60,11 +60,19 @@ public class IntentService {
                 "When the user says \"this week\", set start to TODAY 00:00:00.000Z and end to SATURDAY 23:59:59.000Z of that week. " +
                 "When the user says \"next week\", set start to NEXT SUNDAY 00:00:00.000Z and end to NEXT SATURDAY 23:59:59.000Z. " +
 
-                // ✅ תוספת מינימלית: חוקים ל-AVAILABILITY (בלי לשנות נוסח קיים)
+                // 🔧 חוקים לזמינות
                 "AVAILABILITY rules (\"when am I free\", \"am I free at\", \"מתי אני פנוי\", \"האם אני פנוי\"): " +
                 "If only a DATE is mentioned, set intent=AVAILABILITY and set start=DATE 00:00:00.000Z, end=DATE 23:59:59.000Z. " +
                 "If a TIME RANGE is mentioned with the date, set that exact start/end. " +
                 "If a single TIME is mentioned with the date, set a 1-hour window starting at that time. " +
+
+                // 🔧 הוספה קריטית: כל השעות שהמשתמש כותב הן מקומיות לישראל; הפלט חייב להיות UTC (Z)
+                "All user-provided times MUST be interpreted in the Asia/Jerusalem local time zone. " +
+                "Before returning JSON, CONVERT those local times to UTC and output them with a 'Z' suffix. " +
+                "For example: if the user says \"tomorrow at 17:00\" and Asia/Jerusalem is UTC+3, " +
+                "then start must be 14:00:00.000Z on that date (not 17:00:00.000Z). " +
+                "If only a DATE is given for availability, use local day bounds (00:00:00 and 23:59:59 in Asia/Jerusalem), " +
+                "then convert both to UTC Z before returning. " +
 
                 // עוגנים מספריים כדי לייצב את הפענוח
                 ("Use these time anchors (computed for Asia/Jerusalem): " +
@@ -89,7 +97,6 @@ public class IntentService {
                 "Text: \"" + prompt + "\"";
 
         List<ChatMessage> messages = new ArrayList<>();
-        // נשארים עם הודעת system אחת, כמו אצלך – רק עם ההוספות
         messages.add(new ChatMessage("system", extractionPrompt));
 
         ChatCompletionResult result = chatGPTService.callChatGPT(messages);
