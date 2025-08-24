@@ -367,15 +367,6 @@ public class EventService {
         Instant endInstant = Instant.parse(endDate);
 
 
-        // בחר TZ להצגה/חישוב (אפשר גם לשמור אצל המשתמש אם יש לך שדה עתידי)
-        ZoneId zone = ZoneId.of(DEFAULT_TZ);
-
-// הפרשנות: המחרוזות שמגיעות הן ימי-קצה (למשל "2025-08-21T00:00:00.000Z")
-// אבל אנחנו רוצים "היום" באזור הזמן המקומי (כדי לא לאבד אירועי 00:15/23:30)
-        LocalDate day = startInstant.atZone(zone).toLocalDate();
-
-        Instant min = day.atStartOfDay(zone).toInstant();
-        Instant max = day.plusDays(1).atStartOfDay(zone).minusNanos(1).toInstant();
 
         Events events = googleCalendarClient.events()
                 .list(calId)
