@@ -69,7 +69,7 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         String jwtToken = userService.createJwtFor(user);
 
         // 5. טיפול ב־redirect (כולל קריאה ל־POST_LOGIN_NEXT אם קיים)
-        String redirectUrl = "https://calendargpt.org/index.html"; // fallback
+        String redirectUrl = "https://calendargpt.org/app/chat.html"; // fallback
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {
             for (Cookie c : cookies) {
