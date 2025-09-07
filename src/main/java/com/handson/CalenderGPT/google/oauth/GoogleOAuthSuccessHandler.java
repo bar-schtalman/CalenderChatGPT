@@ -72,6 +72,7 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         String redirectUrl = "https://calendargpt.org/app/chat.html"; // fallback
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {
+            log.info("cookie not null");
             for (Cookie c : cookies) {
                 if ("POST_LOGIN_NEXT".equals(c.getName())) {
                     try {
