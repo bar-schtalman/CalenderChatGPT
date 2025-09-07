@@ -91,7 +91,7 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         response.addCookie(removeCookie);
 
         // הוספת ה־JWT ל־redirect
-        log.info("redirecturl is " + redirectUrl)
+        log.info("redirecturl is " + redirectUrl);
         redirectUrl += (redirectUrl.contains("?") ? "&" : "?") + "token=" + jwtToken;
         response.sendRedirect(redirectUrl);
     }
